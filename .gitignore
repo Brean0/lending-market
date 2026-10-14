@@ -1,0 +1,16 @@
+# Foundry build outputs and local deployment artifacts
+/out/
+/cache/
+/broadcast/
+
+# Browser verification artifacts
+/.playwright-mcp/
+/playwright-report/
+/test-results/
+
+# Local dependencies, environment files, and OS metadata
+node_modules/
+.env
+.env.*
+!.env.example
+.DS_Store
