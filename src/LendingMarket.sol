@@ -2,7 +2,6 @@
 pragma solidity 0.8.24;
 
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {IERC20} from "./interfaces/IERC20.sol";
 import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
@@ -278,8 +277,8 @@ contract LendingMarket {
         uint256 price = getPrice();
 
         // Convert base repayment to collateral using the incentive and base-per-collateral price.
-        // Their FACTOR scales cancel; keep full precision until one final floor in collateral wei.
-        uint256 seizeAmount = Math.mulDiv(repayAmount, liquidationIncentive, price);
+        // Their FACTOR scales cancel: checked multiplication, then one final floor in collateral wei.
+        uint256 seizeAmount = (repayAmount * liquidationIncentive) / price;
         if (seizeAmount > collateralBalance[borrower]) {
             seizeAmount = collateralBalance[borrower];
         }

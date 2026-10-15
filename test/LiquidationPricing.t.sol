@@ -54,6 +54,34 @@ contract LiquidationPricingTest is LendingMarketTest {
         _liquidateAndAssert(30e18, 25e18, 10e18);
     }
 
+    function test_liquidationCheckedProductOverflowRollsBack() public {
+        _prepareLiquidation(5e18, 0.5e18);
+        vm.prank(admin);
+        market.setParameters(0.8e18, 1e60, RATE_PER_SECOND);
+        base.mint(liquidator, 1e18);
+
+        vm.startPrank(liquidator);
+        base.approve(address(market), 1e18);
+        // The 1e78 product overflows uint256, even though its 2e60 quotient would fit.
+        vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", uint256(0x11)));
+        market.liquidate(borrower, 1e18);
+        vm.stopPrank();
+
+        assertEq(base.balanceOf(liquidator), 1e18, "liquidator base unchanged");
+        assertEq(base.allowance(liquidator, address(market)), 1e18, "allowance unchanged on overflow");
+        assertEq(base.balanceOf(address(market)), 999_995e18, "market base unchanged");
+        assertEq(base.balanceOf(borrower), 5e18, "borrower base unchanged");
+        assertEq(market.borrowBalanceOf(borrower), 5e18, "borrower debt unchanged");
+        assertEq(market.borrowPrincipal(borrower), 5e18, "borrower principal unchanged");
+        assertEq(market.totalBorrowPrincipal(), 5e18, "global debt unchanged");
+        assertEq(market.collateralBalance(borrower), 10e18, "borrower collateral unchanged");
+        assertEq(market.totalCollateral(), 10e18, "global collateral unchanged");
+        assertEq(weth.balanceOf(address(market)), 10e18, "market collateral unchanged");
+        assertEq(weth.balanceOf(liquidator), 0, "liquidator collateral unchanged");
+        assertEq(weth.balanceOf(borrower), 0, "borrower wallet collateral unchanged");
+        assertEq(market.totalSupplyPrincipal(), 1_000_000e18, "supplier principal unchanged");
+    }
+
     function test_liquidationRejectsZeroPriceWithoutChangingBalances() public {
         _prepareLiquidation(15_000e18, 1_800e18);
         // Establish eligibility with a valid round before testing invalid-price rejection.
