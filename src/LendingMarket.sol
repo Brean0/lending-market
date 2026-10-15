@@ -22,7 +22,8 @@ contract LendingMarket {
     // Constants
     // -------------------------------------------------------------------------------------------
 
-    uint256 internal constant FACTOR = 1e18;
+    uint8 internal constant DECIMALS = 18;
+    uint256 internal constant FACTOR = 10 ** DECIMALS;
 
     // -------------------------------------------------------------------------------------------
     // Storage
@@ -60,6 +61,9 @@ contract LendingMarket {
     bool public paused;
 
     bool private _initialized;
+
+    // Appended for proxy compatibility; configure to match the listed feed's heartbeat.
+    uint256 public maxPriceAge;
 
     // -------------------------------------------------------------------------------------------
     // Events
@@ -113,9 +117,11 @@ contract LendingMarket {
         address collateralToken_,
         uint256 collateralFactor_,
         uint256 liquidationIncentive_,
-        uint256 borrowRatePerSecond_
+        uint256 borrowRatePerSecond_,
+        uint256 maxPriceAge_
     ) external {
         require(!_initialized, "already initialized");
+        require(maxPriceAge_ > 0, "invalid max price age");
         _initialized = true;
 
         admin = admin_;
@@ -127,6 +133,7 @@ contract LendingMarket {
         collateralFactor = collateralFactor_;
         liquidationIncentive = liquidationIncentive_;
         borrowRatePerSecond = borrowRatePerSecond_;
+        maxPriceAge = maxPriceAge_;
 
         baseBorrowIndex = FACTOR;
         baseSupplyIndex = FACTOR;
@@ -329,10 +336,18 @@ contract LendingMarket {
 
     /// @notice Collateral price in base-asset terms, 1e18 scaled.
     function getPrice() public view returns (uint256) {
-        (, int256 answer,,,) = oracle.latestRoundData();
-
-        if answer < 0 return type(uint256).max;
-
+        // Old proxies have zero in the appended slot: fail closed until explicitly configured.
+        require(maxPriceAge > 0, "invalid max price age");
+        // Valuation assumes 1e18 prices; reject incompatible scales rather than misprice collateral.
+        require(oracle.decimals() == DECIMALS, "unsupported oracle decimals");
+        (uint80 roundId, int256 answer,, uint256 updatedAt, uint80 answeredInRound) = oracle.latestRoundData();
+        // Validate before casting: negative answers would become enormous unsigned prices.
+        require(answer > 0, "invalid oracle answer");
+        require(roundId != 0, "invalid oracle round");
+        require(answeredInRound >= roundId, "incomplete oracle round");
+        // Reject missing/future timestamps before subtraction, then require a current valuation.
+        require(updatedAt <= block.timestamp && updatedAt > 0, "invalid oracle timestamp");
+        require(block.timestamp - updatedAt <= maxPriceAge, "stale oracle price");
         return uint256(answer);
     }
 
@@ -378,9 +393,12 @@ contract LendingMarket {
     // Administration
     // -------------------------------------------------------------------------------------------
 
-    function setOracle(address newOracle) external onlyGuardian {
+    function setOracle(address newOracle, uint256 maxPriceAge_) external onlyGuardian {
         require(newOracle != address(0), "zero oracle");
+        require(maxPriceAge_ > 0, "invalid max price age");
+        // Change feed and heartbeat policy atomically so a new feed never inherits the old policy.
         oracle = IPriceOracle(newOracle);
+        maxPriceAge = maxPriceAge_;
         emit OracleUpdated(newOracle);
     }
 
