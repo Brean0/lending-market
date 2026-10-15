@@ -6,6 +6,8 @@ import {LendingMarket} from "../src/LendingMarket.sol";
 import {MockOracle} from "../src/mocks/MockOracle.sol";
 
 contract InterestAccrualModifierTest is LendingMarketTest {
+    event OracleUpdated(address indexed newOracle);
+    event ParametersUpdated(uint256 collateralFactor, uint256 liquidationIncentive, uint256 borrowRate);
     event PausedSet(bool paused);
 
     struct Accrual {
@@ -18,6 +20,10 @@ contract InterestAccrualModifierTest is LendingMarketTest {
         _postCollateral(borrower, 10e18);
         vm.prank(borrower);
         market.borrow(5_000e18);
+    }
+
+    function _storedAccrual() internal view returns (Accrual memory) {
+        return Accrual(market.baseBorrowIndex(), market.baseSupplyIndex(), market.lastAccrualTime());
     }
 
     function _advanceTime() internal returns (Accrual memory expected) {
@@ -57,39 +63,52 @@ contract InterestAccrualModifierTest is LendingMarketTest {
         _assertAccrual(expected);
     }
 
-    function test_setOracleAccrues() public {
+    function test_setOracleLeavesAccrualPendingAndEmitsEvent() public {
         _openDebt();
         MockOracle replacement = new MockOracle(2_000e18);
-        Accrual memory expected = _advanceTime();
+        Accrual memory before = _storedAccrual();
+        _advanceTime();
+
+        vm.expectEmit(true, false, false, true, address(market));
+        emit OracleUpdated(address(replacement));
         vm.prank(admin);
-        market.setOracle(address(replacement), 1 hours);
+        market.setOracle(address(replacement), 2 hours);
+
         assertEq(address(market.oracle()), address(replacement));
-        _assertAccrual(expected);
+        assertEq(market.maxPriceAge(), 2 hours);
+        _assertAccrual(before);
     }
 
-    function test_setAdminAccrues() public {
+    function test_setAdminLeavesAccrualPending() public {
         _openDebt();
-        Accrual memory expected = _advanceTime();
+        Accrual memory before = _storedAccrual();
+        _advanceTime();
         vm.prank(admin);
         market.setAdmin(supplier);
         assertEq(market.admin(), supplier);
-        _assertAccrual(expected);
+        _assertAccrual(before);
     }
 
-    function test_setPausedAccrues() public {
+    function test_guardianPauseLeavesAccrualPendingAndEmitsEvent() public {
         _openDebt();
-        Accrual memory expected = _advanceTime();
+        Accrual memory before = _storedAccrual();
+        _advanceTime();
+
+        vm.expectEmit(false, false, false, true, address(market));
+        emit PausedSet(true);
         vm.prank(guardian);
         market.setPaused(true);
+
         assertTrue(market.paused());
-        _assertAccrual(expected);
+        _assertAccrual(before);
     }
 
-    function test_guardianUnpauseAccruesElapsedInterestAndEmitsEvent() public {
+    function test_guardianUnpauseLeavesAccrualPendingAndEmitsEvent() public {
         _openDebt();
         vm.prank(guardian);
         market.setPaused(true);
-        Accrual memory expected = _advanceTime();
+        Accrual memory before = _storedAccrual();
+        _advanceTime();
 
         vm.expectEmit(false, false, false, true, address(market));
         emit PausedSet(false);
@@ -97,12 +116,36 @@ contract InterestAccrualModifierTest is LendingMarketTest {
         market.setPaused(false);
 
         assertFalse(market.paused());
-        _assertAccrual(expected);
+        _assertAccrual(before);
     }
 
-    function test_setParametersAccruesAtOldRate() public {
+    function test_setParametersLeavesPendingIntervalForNewRateAndEmitsEvent() public {
+        _openDebt();
+        Accrual memory before = _storedAccrual();
+        vm.warp(block.timestamp + 1_000_000);
+
+        vm.expectEmit(false, false, false, true, address(market));
+        emit ParametersUpdated(0.75e18, 1.12e18, 1e10);
+        vm.prank(admin);
+        market.setParameters(0.75e18, 1.12e18, 1e10);
+
+        _assertAccrual(before);
+        assertEq(market.collateralFactor(), 0.75e18);
+        assertEq(market.liquidationIncentive(), 1.12e18);
+        assertEq(market.borrowRatePerSecond(), 1e10);
+
+        // The next accrual applies the new rate to the entire pending interval: 1% on 5,000 debt.
+        market.accrueInterest();
+        _assertAccrual(Accrual(1.01e18, 1.00005e18, block.timestamp));
+        assertEq(market.borrowBalanceOf(borrower), 5_050e18);
+        assertEq(market.supplyBalanceOf(supplier), 1_000_050e18);
+    }
+
+    function test_explicitAccrualBeforeRateChangeSettlesAtOldRate() public {
         _openDebt();
         Accrual memory expected = _advanceTime();
+        market.accrueInterest();
+        _assertAccrual(expected);
         vm.prank(admin);
         market.setParameters(0.75e18, 1.12e18, RATE_PER_SECOND * 2);
         _assertAccrual(expected);
@@ -195,8 +238,7 @@ contract InterestAccrualModifierTest is LendingMarketTest {
 
     function test_repeatInitializationRevertsWithoutAccrualChanges() public {
         _openDebt();
-        Accrual memory before =
-            Accrual(market.baseBorrowIndex(), market.baseSupplyIndex(), market.lastAccrualTime());
+        Accrual memory before = _storedAccrual();
         _advanceTime();
         vm.expectRevert("already initialized");
         market.initialize(supplier, borrower, address(0), address(0), address(0), 0, 0, 0, 1 hours);
@@ -208,8 +250,7 @@ contract InterestAccrualModifierTest is LendingMarketTest {
 
     function test_viewsKeepStoredValuesWithoutProjection() public {
         _openDebt();
-        Accrual memory before =
-            Accrual(market.baseBorrowIndex(), market.baseSupplyIndex(), market.lastAccrualTime());
+        Accrual memory before = _storedAccrual();
         _advanceTime();
         assertEq(market.borrowBalanceOf(borrower), 5_000e18);
         assertEq(market.supplyBalanceOf(supplier), 1_000_000e18);
@@ -221,7 +262,7 @@ contract InterestAccrualModifierTest is LendingMarketTest {
         _assertAccrual(before);
     }
 
-    function test_pausedRepayAccrualAndAdminControlsRemainAvailable() public {
+    function test_pausedRepayAccruesWhileAdminControlsLeaveInterestPending() public {
         _openDebt();
         vm.prank(guardian);
         market.setPaused(true);
@@ -234,31 +275,75 @@ contract InterestAccrualModifierTest is LendingMarketTest {
         expected = _advanceTime();
         market.accrueInterest();
         _assertAccrual(expected);
-        expected = _advanceTime();
+        Accrual memory before = _storedAccrual();
+
+        _advanceTime();
         vm.prank(admin);
-        market.setParameters(0.8e18, 1.1e18, RATE_PER_SECOND);
-        _assertAccrual(expected);
-        expected = _advanceTime();
+        market.setParameters(0.75e18, 1.12e18, RATE_PER_SECOND * 2);
+        assertEq(market.collateralFactor(), 0.75e18);
+        assertEq(market.liquidationIncentive(), 1.12e18);
+        assertEq(market.borrowRatePerSecond(), RATE_PER_SECOND * 2);
+        _assertAccrual(before);
+
+        _advanceTime();
+        MockOracle replacement = new MockOracle(2_000e18);
         vm.prank(admin);
-        market.setOracle(address(wethOracle), 1 hours);
-        _assertAccrual(expected);
-        expected = _advanceTime();
+        market.setOracle(address(replacement), 2 hours);
+        assertEq(address(market.oracle()), address(replacement));
+        assertEq(market.maxPriceAge(), 2 hours);
+        _assertAccrual(before);
+
+        _advanceTime();
         vm.prank(admin);
-        market.setAdmin(admin);
-        _assertAccrual(expected);
-        expected = _advanceTime();
-        vm.prank(admin);
+        market.setAdmin(supplier);
+        assertEq(market.admin(), supplier);
+        _assertAccrual(before);
+
+        _advanceTime();
+        vm.prank(supplier);
         market.setPaused(false);
-        _assertAccrual(expected);
+        _assertAccrual(before);
         assertFalse(market.paused());
+    }
+
+    function test_pauseAndParameterRepairRemainAvailableWhenAccrualOverflows() public {
+        _openDebt();
+        vm.prank(admin);
+        market.setParameters(0.8e18, 1.1e18, type(uint256).max);
+        Accrual memory before = _storedAccrual();
+        vm.warp(block.timestamp + 2);
+
+        vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", 0x11));
+        market.accrueInterest();
+        _assertAccrual(before);
+
+        vm.prank(guardian);
+        market.setPaused(true);
+        assertTrue(market.paused());
+        _assertAccrual(before);
+        vm.prank(guardian);
+        market.setPaused(false);
+        assertFalse(market.paused());
+        _assertAccrual(before);
+
+        vm.prank(admin);
+        market.setParameters(0.75e18, 1.12e18, RATE_PER_SECOND);
+        assertEq(market.collateralFactor(), 0.75e18);
+        assertEq(market.liquidationIncentive(), 1.12e18);
+        assertEq(market.borrowRatePerSecond(), RATE_PER_SECOND);
+        _assertAccrual(before);
+
+        market.accrueInterest();
+        assertEq(market.lastAccrualTime(), block.timestamp);
+        assertGt(market.baseBorrowIndex(), before.borrowIndex);
+        assertGt(market.baseSupplyIndex(), before.supplyIndex);
     }
 
     function test_rejectedActionsPreserveAccrualState() public {
         _openDebt();
         vm.prank(guardian);
         market.setPaused(true);
-        Accrual memory before =
-            Accrual(market.baseBorrowIndex(), market.baseSupplyIndex(), market.lastAccrualTime());
+        Accrual memory before = _storedAccrual();
         _advanceTime();
         bytes[5] memory pausedCalls = [
             abi.encodeCall(market.supply, (1e18)),
@@ -286,13 +371,12 @@ contract InterestAccrualModifierTest is LendingMarketTest {
         _assertAccrual(before);
     }
 
-    function test_authorizationAndPauseGuardsRunBeforeAccrual() public {
+    function test_guardsPreserveRejectionsWhenAccrualWouldOverflow() public {
         vm.prank(admin);
         market.setParameters(0.8e18, 1.1e18, type(uint256).max);
         vm.prank(guardian);
         market.setPaused(true);
-        Accrual memory before =
-            Accrual(market.baseBorrowIndex(), market.baseSupplyIndex(), market.lastAccrualTime());
+        Accrual memory before = _storedAccrual();
         vm.warp(block.timestamp + 2);
         // Any attempted accrual would overflow; the original rejection must win.
         vm.expectRevert("paused");

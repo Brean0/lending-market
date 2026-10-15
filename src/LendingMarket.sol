@@ -401,7 +401,7 @@ contract LendingMarket {
         emit OracleUpdated(newOracle);
     }
 
-    // Settle elapsed debt at the old rate before the function body installs a new rate.
+    // Call accrueInterest before changing the rate to settle elapsed debt at the old rate.
     function setParameters(
         uint256 collateralFactor_,
         uint256 liquidationIncentive_,
