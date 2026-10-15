@@ -4,9 +4,10 @@ Single-collateral money market. Suppliers deposit the base asset and earn intere
 
 ## Running it
 
-The project is self-contained. `forge-std` and the OpenZeppelin dependency subset are vendored under `lib/`, so no network access or `forge install` is needed once Foundry and the pinned Solidity 0.8.24 compiler are available.
+`forge-std` is vendored under `lib/`. Install the pinned OpenZeppelin dependency before building a fresh checkout; its local source directory is excluded from Git.
 
 ```bash
+forge install --no-git OpenZeppelin/openzeppelin-contracts@rev=cab19933c33c2ad1d4c7a84864a3601dddfd16f3
 forge build
 forge test
 forge test -vvv --match-test <name>     # a single test, with traces
@@ -16,7 +17,7 @@ Requires Foundry. If you do not have it: `curl -L https://foundry.paradigm.xyz |
 
 ## Pinned dependencies
 
-OpenZeppelin Contracts **v5.7.0**, commit [`cab19933c33c2ad1d4c7a84864a3601dddfd16f3`](https://github.com/OpenZeppelin/openzeppelin-contracts/tree/cab19933c33c2ad1d4c7a84864a3601dddfd16f3), is vendored unmodified under `lib/openzeppelin-contracts/`. The subset contains the complete import closure of `SafeERC20` and `Math` (for the accounting follow-up), plus the upstream MIT license, provenance, and SHA-256 checksums. Its `^0.8.20` pragmas are compatible with this project's Solidity 0.8.24. Imports use the explicit `@openzeppelin/contracts/` remapping in `foundry.toml`; no submodule or runtime install is required. See [dependency provenance](lib/openzeppelin-contracts/README.vendor.md).
+OpenZeppelin Contracts **v5.7.0**, commit [`cab19933c33c2ad1d4c7a84864a3601dddfd16f3`](https://github.com/OpenZeppelin/openzeppelin-contracts/tree/cab19933c33c2ad1d4c7a84864a3601dddfd16f3), provides `SafeERC20`. The install command above pins that exact revision under the Git-ignored `lib/openzeppelin-contracts/` directory without creating a submodule. Imports use the explicit `@openzeppelin/contracts/` remapping in `foundry.toml`. Install dependencies before running build or test commands in CI as well.
 
 ## Layout
 
