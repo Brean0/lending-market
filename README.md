@@ -49,16 +49,16 @@ test/
 
 **Liquidation.** Once a position is unhealthy, anyone may repay part of its debt and receive collateral in exchange, plus the liquidation incentive. The incentive is 1e18 scaled and always at or above par, so `1.10e18` means the liquidator receives 110% of what they repaid, valued in collateral.
 
-**Deployment.** The market is an implementation behind a `TransparentUpgradeableProxy`. All market state lives in the proxy's storage, which is why any change you make has to be layout-compatible with what is already deployed. The admin owns upgrades and risk parameters. A separate pause guardian exists so the market can be stopped quickly without reaching for the admin key.
+**Deployment.** The market is an implementation behind a `TransparentUpgradeableProxy`. All market state lives in the proxy's storage, which is why any change you make has to be layout-compatible with what is already deployed. The admin owns upgrades and risk parameters. A separate pause guardian can pause and unpause the market without reaching for the admin key.
 
 ## Roles
 
 | Role | Held by | Remit |
 |---|---|---|
 | `admin` | governance timelock | upgrades, risk parameters, oracle changes, pausing and unpausing |
-| `pauseGuardian` | operations multisig | pausing the market in an incident (`setPaused(true)`) |
+| `pauseGuardian` | operations multisig | pausing and unpausing the market (`setPaused(bool)`) |
 
-The split matters. The guardian key is warmer and held by more people than the admin key, so anything the guardian can reach should be limited to stopping the market, not changing how it prices or values anything. Only the admin can call `setOracle` or unpause with `setPaused(false)`; the admin retains emergency pause access.
+The guardian controls whether the market is paused and can both pause with `setPaused(true)` and resume with `setPaused(false)`. Oracle changes affect collateral valuations and remain restricted to the admin through `setOracle`. The admin can also pause and unpause.
 
 ## Listed markets
 

@@ -38,14 +38,15 @@ contract GuardianAuthorityTest is LendingMarketTest {
         assertTrue(market.paused());
     }
 
-    function test_guardianCannotUnpause() public {
+    function test_guardianCanUnpauseAndEmitsEvent() public {
         vm.startPrank(guardian);
         market.setPaused(true);
-        vm.expectRevert("not admin");
+        vm.expectEmit(false, false, false, true, address(market));
+        emit PausedSet(false);
         market.setPaused(false);
         vm.stopPrank();
 
-        assertTrue(market.paused());
+        assertFalse(market.paused());
     }
 
     function test_adminCanPauseAndUnpauseAndEmitsEvents() public {

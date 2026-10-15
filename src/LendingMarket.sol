@@ -389,7 +389,7 @@ contract LendingMarket {
     // Administration
     // -------------------------------------------------------------------------------------------
 
-    // Oracle changes alter collateral valuations, so the stop-only guardian cannot authorize them.
+    // Oracle changes alter collateral valuations and require admin authorization.
     function setOracle(address newOracle, uint256 maxPriceAge_) external onlyAdmin {
         require(newOracle != address(0), "zero oracle");
         require(maxPriceAge_ > 0, "invalid max price age");
@@ -417,8 +417,6 @@ contract LendingMarket {
     }
 
     function setPaused(bool paused_) external onlyGuardian {
-        // The guardian may stop risk-taking; only admin may resume it after an incident.
-        require(paused_ || msg.sender == admin, "not admin");
         paused = paused_;
         emit PausedSet(paused_);
     }
