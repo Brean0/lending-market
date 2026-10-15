@@ -55,10 +55,10 @@ test/
 
 | Role | Held by | Remit |
 |---|---|---|
-| `admin` | governance timelock | upgrades, risk parameters, wiring |
-| `pauseGuardian` | operations multisig | stopping the market in an incident |
+| `admin` | governance timelock | upgrades, risk parameters, oracle changes, pausing and unpausing |
+| `pauseGuardian` | operations multisig | pausing the market in an incident (`setPaused(true)`) |
 
-The split matters. The guardian key is warmer and held by more people than the admin key, so anything the guardian can reach should be limited to stopping the market, not changing how it prices or values anything.
+The split matters. The guardian key is warmer and held by more people than the admin key, so anything the guardian can reach should be limited to stopping the market, not changing how it prices or values anything. Only the admin can call `setOracle` or unpause with `setPaused(false)`; the admin retains emergency pause access.
 
 ## Listed markets
 
