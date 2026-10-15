@@ -9,6 +9,8 @@ contract PrincipalRoundingTest is LendingMarketTest {
         vm.prank(borrower);
         market.borrow(5_000e18 + 7);
         vm.warp(block.timestamp + elapsed);
+        // Keep the unchanged collateral price fresh while testing interest-driven rounding.
+        wethOracle.setPrice(2_000e18);
         market.accrueInterest();
         assertGt(market.baseBorrowIndex(), FACTOR);
         assertGt(market.baseSupplyIndex(), FACTOR);
