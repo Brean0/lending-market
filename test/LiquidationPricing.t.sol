@@ -38,7 +38,9 @@ contract LiquidationPricingTest is LendingMarketTest {
     }
 
     function test_liquidationRejectsZeroPriceWithoutChangingBalances() public {
-        _prepareLiquidation(15_000e18, 0);
+        _prepareLiquidation(15_000e18, 1_800e18);
+        // Establish eligibility with a valid round before testing invalid-price rejection.
+        wethOracle.setPrice(0);
         base.mint(liquidator, 1_000e18);
         vm.startPrank(liquidator);
         base.approve(address(market), type(uint256).max);
