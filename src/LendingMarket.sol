@@ -123,7 +123,7 @@ contract LendingMarket {
         uint256 liquidationIncentive_,
         uint256 borrowRatePerSecond_,
         uint256 maxPriceAge_
-    ) external accruesInterest {
+    ) external {
         require(!_initialized, "already initialized");
         require(maxPriceAge_ > 0, "invalid max price age");
         _initialized = true;
@@ -392,7 +392,7 @@ contract LendingMarket {
     // -------------------------------------------------------------------------------------------
 
     // Oracle changes alter collateral valuations and require admin authorization.
-    function setOracle(address newOracle, uint256 maxPriceAge_) external onlyAdmin accruesInterest {
+    function setOracle(address newOracle, uint256 maxPriceAge_) external onlyAdmin {
         require(newOracle != address(0), "zero oracle");
         require(maxPriceAge_ > 0, "invalid max price age");
         // Change feed and heartbeat policy atomically so a new feed never inherits the old policy.
@@ -406,7 +406,7 @@ contract LendingMarket {
         uint256 collateralFactor_,
         uint256 liquidationIncentive_,
         uint256 borrowRatePerSecond_
-    ) external onlyAdmin accruesInterest {
+    ) external onlyAdmin {
         require(collateralFactor_ <= FACTOR, "cf too high");
         require(liquidationIncentive_ >= FACTOR, "incentive below par");
 
@@ -417,12 +417,12 @@ contract LendingMarket {
         emit ParametersUpdated(collateralFactor_, liquidationIncentive_, borrowRatePerSecond_);
     }
 
-    function setPaused(bool paused_) external onlyGuardian accruesInterest {
+    function setPaused(bool paused_) external onlyGuardian {
         paused = paused_;
         emit PausedSet(paused_);
     }
 
-    function setAdmin(address newAdmin) external onlyAdmin accruesInterest {
+    function setAdmin(address newAdmin) external onlyAdmin {
         require(newAdmin != address(0), "zero admin");
         admin = newAdmin;
     }
