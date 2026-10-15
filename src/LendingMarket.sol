@@ -103,6 +103,12 @@ contract LendingMarket {
         _;
     }
 
+    modifier accruesInterest() {
+        // Initialization establishes the indices; never accrue against unset market state.
+        if (_initialized) _accrueInterest();
+        _;
+    }
+
     // -------------------------------------------------------------------------------------------
     // Initialization
     // -------------------------------------------------------------------------------------------
@@ -117,7 +123,7 @@ contract LendingMarket {
         uint256 liquidationIncentive_,
         uint256 borrowRatePerSecond_,
         uint256 maxPriceAge_
-    ) external {
+    ) external accruesInterest {
         require(!_initialized, "already initialized");
         require(maxPriceAge_ > 0, "invalid max price age");
         _initialized = true;
@@ -143,7 +149,10 @@ contract LendingMarket {
     // -------------------------------------------------------------------------------------------
 
     /// @notice Advances both indices to the current block timestamp.
-    function accrueInterest() public {
+    function accrueInterest() public accruesInterest {}
+
+    // Use an internal helper so modifier-driven entry points cannot recurse through accrueInterest.
+    function _accrueInterest() internal {
         uint256 elapsed = block.timestamp - lastAccrualTime;
         if (elapsed == 0) return;
 
@@ -166,9 +175,8 @@ contract LendingMarket {
     // Supplier actions
     // -------------------------------------------------------------------------------------------
 
-    function supply(uint256 amount) external whenNotPaused {
+    function supply(uint256 amount) external whenNotPaused accruesInterest {
         require(amount > 0, "zero amount");
-        accrueInterest();
 
         baseToken.safeTransferFrom(msg.sender, address(this), amount);
 
@@ -179,9 +187,8 @@ contract LendingMarket {
         emit Supply(msg.sender, amount);
     }
 
-    function withdraw(uint256 amount) external whenNotPaused {
+    function withdraw(uint256 amount) external whenNotPaused accruesInterest {
         require(amount > 0, "zero amount");
-        accrueInterest();
 
         // Base leaving the market must debit enough principal to cover the transfer.
         uint256 principal = _principalForSupplyUp(amount);
@@ -199,7 +206,7 @@ contract LendingMarket {
     // Borrower actions
     // -------------------------------------------------------------------------------------------
 
-    function supplyCollateral(uint256 amount) external whenNotPaused {
+    function supplyCollateral(uint256 amount) external whenNotPaused accruesInterest {
         require(amount > 0, "zero amount");
 
         collateralToken.safeTransferFrom(msg.sender, address(this), amount);
@@ -210,7 +217,7 @@ contract LendingMarket {
         emit SupplyCollateral(msg.sender, amount);
     }
 
-    function withdrawCollateral(uint256 amount) external whenNotPaused {
+    function withdrawCollateral(uint256 amount) external whenNotPaused accruesInterest {
         require(amount > 0, "zero amount");
         require(collateralBalance[msg.sender] >= amount, "insufficient collateral");
 
@@ -227,9 +234,8 @@ contract LendingMarket {
         emit WithdrawCollateral(msg.sender, amount);
     }
 
-    function borrow(uint256 amount) external whenNotPaused {
+    function borrow(uint256 amount) external whenNotPaused accruesInterest {
         require(amount > 0, "zero amount");
-        accrueInterest();
 
         // Base leaving the market must create debt for the entire transfer, even for one wei.
         uint256 principal = _principalForBorrowUp(amount);
@@ -243,9 +249,8 @@ contract LendingMarket {
         emit Borrow(msg.sender, amount);
     }
 
-    function repay(uint256 amount) external {
+    function repay(uint256 amount) external accruesInterest {
         require(amount > 0, "zero amount");
-        accrueInterest();
 
         uint256 owed = borrowBalanceOf(msg.sender);
         if (amount > owed) amount = owed;
@@ -271,9 +276,8 @@ contract LendingMarket {
      * @param borrower the account being liquidated
      * @param repayAmount how much of the borrower's debt the liquidator is repaying
      */
-    function liquidate(address borrower, uint256 repayAmount) external whenNotPaused {
+    function liquidate(address borrower, uint256 repayAmount) external whenNotPaused accruesInterest {
         require(repayAmount > 0, "zero amount");
-        accrueInterest();
 
         require(!isHealthy(borrower), "borrower is healthy");
 
@@ -390,7 +394,7 @@ contract LendingMarket {
     // -------------------------------------------------------------------------------------------
 
     // Oracle changes alter collateral valuations and require admin authorization.
-    function setOracle(address newOracle, uint256 maxPriceAge_) external onlyAdmin {
+    function setOracle(address newOracle, uint256 maxPriceAge_) external onlyAdmin accruesInterest {
         require(newOracle != address(0), "zero oracle");
         require(maxPriceAge_ > 0, "invalid max price age");
         // Change feed and heartbeat policy atomically so a new feed never inherits the old policy.
@@ -399,15 +403,14 @@ contract LendingMarket {
         emit OracleUpdated(newOracle);
     }
 
+    // Settle elapsed debt at the old rate before the function body installs a new rate.
     function setParameters(
         uint256 collateralFactor_,
         uint256 liquidationIncentive_,
         uint256 borrowRatePerSecond_
-    ) external onlyAdmin {
+    ) external onlyAdmin accruesInterest {
         require(collateralFactor_ <= FACTOR, "cf too high");
         require(liquidationIncentive_ >= FACTOR, "incentive below par");
-
-        accrueInterest();
 
         collateralFactor = collateralFactor_;
         liquidationIncentive = liquidationIncentive_;
@@ -416,12 +419,14 @@ contract LendingMarket {
         emit ParametersUpdated(collateralFactor_, liquidationIncentive_, borrowRatePerSecond_);
     }
 
-    function setPaused(bool paused_) external onlyGuardian {
+    function setPaused(bool paused_) external onlyGuardian accruesInterest {
+        // The guardian may stop risk-taking; only admin may resume it after an incident.
+        require(paused_ || msg.sender == admin, "not admin");
         paused = paused_;
         emit PausedSet(paused_);
     }
 
-    function setAdmin(address newAdmin) external onlyAdmin {
+    function setAdmin(address newAdmin) external onlyAdmin accruesInterest {
         require(newAdmin != address(0), "zero admin");
         admin = newAdmin;
     }
