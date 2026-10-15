@@ -274,7 +274,7 @@ contract LendingMarket {
         if (repayAmount > owed) repayAmount = owed;
 
         uint256 price = getPrice();
-        require(price > 0, "zero price"); // A zero quote cannot price the collateral being seized.
+        require(price > 0, "invalid oracle answer"); // A zero quote cannot price the collateral being seized.
 
         // Base and collateral units are not interchangeable: convert the incentive-adjusted
         // base repayment using the 1e18-scaled base-per-collateral price before applying the cap.

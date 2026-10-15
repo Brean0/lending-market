@@ -42,7 +42,7 @@ contract LiquidationPricingTest is LendingMarketTest {
         base.mint(liquidator, 1_000e18);
         vm.startPrank(liquidator);
         base.approve(address(market), type(uint256).max);
-        vm.expectRevert("zero price");
+        vm.expectRevert("invalid oracle answer");
         market.liquidate(borrower, 1_000e18);
         vm.stopPrank();
 
