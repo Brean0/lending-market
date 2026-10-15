@@ -4,15 +4,20 @@ Single-collateral money market. Suppliers deposit the base asset and earn intere
 
 ## Running it
 
-The project is self-contained. `forge-std` is vendored under `lib/`, so no network access or `forge install` is needed.
+`forge-std` is vendored under `lib/`. Install the pinned OpenZeppelin dependency before building a fresh checkout; its local source directory is excluded from Git.
 
 ```bash
+forge install --no-git OpenZeppelin/openzeppelin-contracts@rev=cab19933c33c2ad1d4c7a84864a3601dddfd16f3
 forge build
 forge test
 forge test -vvv --match-test <name>     # a single test, with traces
 ```
 
 Requires Foundry. If you do not have it: `curl -L https://foundry.paradigm.xyz | bash && foundryup`
+
+## Pinned dependencies
+
+OpenZeppelin Contracts **v5.7.0**, commit [`cab19933c33c2ad1d4c7a84864a3601dddfd16f3`](https://github.com/OpenZeppelin/openzeppelin-contracts/tree/cab19933c33c2ad1d4c7a84864a3601dddfd16f3), provides `SafeERC20`. The install command above pins that exact revision under the Git-ignored `lib/openzeppelin-contracts/` directory without creating a submodule. Imports use the explicit `@openzeppelin/contracts/` remapping in `foundry.toml`. Install dependencies before running build or test commands in CI as well.
 
 ## Layout
 
@@ -31,6 +36,8 @@ test/
 ## How it works
 
 **Accounting.** Supplier and borrower balances are stored as *principal* and scaled by two global indices, `baseSupplyIndex` and `baseBorrowIndex`. `accrueInterest()` advances both to the current timestamp. Present value is `principal * index / 1e18`, so a balance grows without anyone touching per-account storage.
+
+**Asset settlement.** Listed assets must be standard 18-decimal ERC20 contracts without transfer fees or rebasing. Every token movement uses OpenZeppelin `SafeERC20.safeTransfer` or `safeTransferFrom` directly. SafeERC20 accepts no return data or a canonical `true` first return word (including trailing ABI data), rejects false/invalid returns, and bubbles token reverts. Failed transfers revert the entire operation, including accounting changes and both liquidation legs. Accounting assumes the requested token amount moves; SafeERC20 does not verify balance changes. Verify asset behavior and decimal compatibility before listing. Transfer failures expose SafeERC20 errors or the token's revert reason.
 
 **Scaling.** Everything is 1e18 fixed point unless stated otherwise. The oracle quotes the collateral in base-asset terms, also 1e18. So with WETH at 2,000 base, `getPrice()` returns `2000e18`.
 

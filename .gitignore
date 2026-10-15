@@ -9,6 +9,7 @@
 /test-results/
 
 # Local dependencies, environment files, and OS metadata
+/lib/openzeppelin-contracts/
 node_modules/
 .env
 .env.*

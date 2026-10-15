@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.24;
 
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "./interfaces/IERC20.sol";
 import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
 
@@ -15,8 +16,12 @@ import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
  *
  *      Scaling: all values are 1e18-fixed-point unless stated otherwise. Collateral prices are
  *      quoted by the oracle in base-asset terms, also 1e18.
+ *      Listed assets must be standard 18-decimal ERC20 contracts without transfer fees or rebasing.
+ *      SafeERC20 validates transfer call results; accounting assumes the requested amount moves.
  */
 contract LendingMarket {
+    using SafeERC20 for IERC20;
+
     // -------------------------------------------------------------------------------------------
     // Constants
     // -------------------------------------------------------------------------------------------
@@ -164,7 +169,7 @@ contract LendingMarket {
         require(amount > 0, "zero amount");
         accrueInterest();
 
-        baseToken.transferFrom(msg.sender, address(this), amount);
+        baseToken.safeTransferFrom(msg.sender, address(this), amount);
 
         uint256 principal = _principalForSupply(amount);
         supplyPrincipal[msg.sender] += principal;
@@ -183,7 +188,7 @@ contract LendingMarket {
         supplyPrincipal[msg.sender] -= principal;
         totalSupplyPrincipal -= principal;
 
-        baseToken.transfer(msg.sender, amount);
+        baseToken.safeTransfer(msg.sender, amount);
 
         emit Withdraw(msg.sender, amount);
     }
@@ -195,7 +200,7 @@ contract LendingMarket {
     function supplyCollateral(uint256 amount) external whenNotPaused {
         require(amount > 0, "zero amount");
 
-        collateralToken.transferFrom(msg.sender, address(this), amount);
+        collateralToken.safeTransferFrom(msg.sender, address(this), amount);
 
         collateralBalance[msg.sender] += amount;
         totalCollateral += amount;
@@ -212,7 +217,7 @@ contract LendingMarket {
 
         require(isHealthy(msg.sender), "would be undercollateralized");
 
-        collateralToken.transfer(msg.sender, amount);
+        collateralToken.safeTransfer(msg.sender, amount);
 
         emit WithdrawCollateral(msg.sender, amount);
     }
@@ -227,7 +232,7 @@ contract LendingMarket {
 
         require(isHealthy(msg.sender), "would be undercollateralized");
 
-        baseToken.transfer(msg.sender, amount);
+        baseToken.safeTransfer(msg.sender, amount);
 
         emit Borrow(msg.sender, amount);
     }
@@ -241,7 +246,7 @@ contract LendingMarket {
 
         uint256 principal = _principalForBorrow(amount);
 
-        baseToken.transferFrom(msg.sender, address(this), amount);
+        baseToken.safeTransferFrom(msg.sender, address(this), amount);
 
         borrowPrincipal[msg.sender] -= principal;
         totalBorrowPrincipal -= principal;
@@ -280,8 +285,8 @@ contract LendingMarket {
         collateralBalance[borrower] -= seizeAmount;
         totalCollateral -= seizeAmount;
 
-        baseToken.transferFrom(msg.sender, address(this), repayAmount);
-        collateralToken.transfer(msg.sender, seizeAmount);
+        baseToken.safeTransferFrom(msg.sender, address(this), repayAmount);
+        collateralToken.safeTransfer(msg.sender, seizeAmount);
 
         emit Liquidate(msg.sender, borrower, repayAmount, seizeAmount);
     }
@@ -370,10 +375,11 @@ contract LendingMarket {
         emit OracleUpdated(newOracle);
     }
 
-    function setParameters(uint256 collateralFactor_, uint256 liquidationIncentive_, uint256 borrowRatePerSecond_)
-        external
-        onlyAdmin
-    {
+    function setParameters(
+        uint256 collateralFactor_,
+        uint256 liquidationIncentive_,
+        uint256 borrowRatePerSecond_
+    ) external onlyAdmin {
         require(collateralFactor_ <= FACTOR, "cf too high");
         require(liquidationIncentive_ >= FACTOR, "incentive below par");
 
