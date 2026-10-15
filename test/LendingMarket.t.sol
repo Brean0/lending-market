@@ -46,7 +46,8 @@ contract LendingMarketTest is Test {
                 address(weth),
                 0.80e18,
                 1.10e18,
-                RATE_PER_SECOND
+                RATE_PER_SECOND,
+                1 hours
             )
         );
         market = LendingMarket(address(new TransparentUpgradeableProxy(address(impl), admin, initData)));
