@@ -389,7 +389,8 @@ contract LendingMarket {
     // Administration
     // -------------------------------------------------------------------------------------------
 
-    function setOracle(address newOracle, uint256 maxPriceAge_) external onlyGuardian {
+    // Oracle changes alter collateral valuations and require admin authorization.
+    function setOracle(address newOracle, uint256 maxPriceAge_) external onlyAdmin {
         require(newOracle != address(0), "zero oracle");
         require(maxPriceAge_ > 0, "invalid max price age");
         // Change feed and heartbeat policy atomically so a new feed never inherits the old policy.
