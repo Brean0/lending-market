@@ -213,6 +213,9 @@ contract LendingMarket {
         require(amount > 0, "zero amount");
         require(collateralBalance[msg.sender] >= amount, "insufficient collateral");
 
+        // Withdrawal health must include elapsed interest so collateral cannot leave against stale debt.
+        accrueInterest();
+
         collateralBalance[msg.sender] -= amount;
         totalCollateral -= amount;
 
