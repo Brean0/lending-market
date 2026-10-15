@@ -34,6 +34,8 @@ test/
 
 **Scaling.** Everything is 1e18 fixed point unless stated otherwise. The oracle quotes the collateral in base-asset terms, also 1e18. So with WETH at 2,000 base, `getPrice()` returns `2000e18`.
 
+**Oracle validity and freshness.** Pricing requires an oracle reporting exactly 18 decimals, a strictly positive answer, a nonzero round ID, and `answeredInRound >= roundId`. The update timestamp must be nonzero, no later than the current block, and at most one hour old (exactly one hour is accepted). This fixed one-hour maximum age is a conservative freshness policy for the documented 18-decimal feed; verify that the policy matches the feed's heartbeat before listing another feed. Other decimal scales are rejected rather than rescaled. Invalid or unavailable oracle data makes price-dependent health checks, borrowing, collateral withdrawal with debt, and liquidation revert; debt-free `isHealthy()` returns true without querying the oracle. These checks validate reported metadata, not the correctness of the feed's economic price.
+
 **Borrowing power.** `collateralBalance * price * collateralFactor`, all 1e18 scaled. A position is healthy while its borrowing power covers its debt. `isHealthy()` is the single source of truth for this, and it is checked on any path that increases risk.
 
 **Liquidation.** Once a position is unhealthy, anyone may repay part of its debt and receive collateral in exchange, plus the liquidation incentive. The incentive is 1e18 scaled and always at or above par, so `1.10e18` means the liquidator receives 110% of what they repaid, valued in collateral.

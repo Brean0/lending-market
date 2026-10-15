@@ -22,6 +22,9 @@ contract LendingMarket {
     // -------------------------------------------------------------------------------------------
 
     uint256 internal constant FACTOR = 1e18;
+    // Conservative freshness policy for the documented 18-decimal feed; match a feed's heartbeat
+    // before listing another feed so stale collateral cannot authorize new risk.
+    uint256 internal constant MAX_PRICE_AGE = 1 hours;
 
     // -------------------------------------------------------------------------------------------
     // Storage
@@ -321,7 +324,16 @@ contract LendingMarket {
 
     /// @notice Collateral price in base-asset terms, 1e18 scaled.
     function getPrice() public view returns (uint256) {
-        (, int256 answer,,,) = oracle.latestRoundData();
+        // Valuation assumes 1e18 prices; reject incompatible scales rather than misprice collateral.
+        require(oracle.decimals() == 18, "unsupported oracle decimals");
+        (uint80 roundId, int256 answer,, uint256 updatedAt, uint80 answeredInRound) = oracle.latestRoundData();
+        // Validate before casting: negative answers would become enormous unsigned prices.
+        require(answer > 0, "invalid oracle answer");
+        require(roundId != 0, "invalid oracle round");
+        require(answeredInRound >= roundId, "incomplete oracle round");
+        // Reject missing/future timestamps before subtraction, then require a current valuation.
+        require(updatedAt > 0 && updatedAt <= block.timestamp, "invalid oracle timestamp");
+        require(block.timestamp - updatedAt <= MAX_PRICE_AGE, "stale oracle price");
         return uint256(answer);
     }
 
