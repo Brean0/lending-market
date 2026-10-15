@@ -183,7 +183,8 @@ contract LendingMarket {
         require(amount > 0, "zero amount");
         accrueInterest();
 
-        uint256 principal = _principalForSupply(amount); // princip
+        // Base leaving the market must debit enough principal to cover the transfer.
+        uint256 principal = _principalForSupplyUp(amount);
         require(supplyPrincipal[msg.sender] >= principal, "insufficient balance");
 
         supplyPrincipal[msg.sender] -= principal;
@@ -230,7 +231,8 @@ contract LendingMarket {
         require(amount > 0, "zero amount");
         accrueInterest();
 
-        uint256 principal = _principalForBorrow(amount);
+        // Base leaving the market must create debt for the entire transfer, even for one wei.
+        uint256 principal = _principalForBorrowUp(amount);
         borrowPrincipal[msg.sender] += principal;
         totalBorrowPrincipal += principal;
 
@@ -248,7 +250,8 @@ contract LendingMarket {
         uint256 owed = borrowBalanceOf(msg.sender);
         if (amount > owed) amount = owed;
 
-        uint256 principal = _principalForBorrow(amount);
+        // Paying the displayed full debt clears all principal; reconversion can leave dust.
+        uint256 principal = amount == owed ? borrowPrincipal[msg.sender] : _principalForBorrow(amount);
 
         baseToken.safeTransferFrom(msg.sender, address(this), amount);
 
@@ -286,7 +289,8 @@ contract LendingMarket {
             seizeAmount = collateralBalance[borrower];
         }
 
-        uint256 principal = _principalForBorrow(repayAmount);
+        // Full liquidation clears principal dust just like full repayment.
+        uint256 principal = repayAmount == owed ? borrowPrincipal[borrower] : _principalForBorrow(repayAmount);
         borrowPrincipal[borrower] -= principal;
         totalBorrowPrincipal -= principal;
 
@@ -360,14 +364,25 @@ contract LendingMarket {
     // Internal accounting helpers
     // -------------------------------------------------------------------------------------------
 
-    // both of these round down.
+    // Incoming partial repayments round down so debt relief never exceeds the amount paid.
     function _principalForBorrow(uint256 amount) internal view returns (uint256) {
         return (amount * FACTOR) / baseBorrowIndex;
     }
 
-    // both of these round down.
+    // Incoming deposits round down so supplier credit never exceeds the amount received.
     function _principalForSupply(uint256 amount) internal view returns (uint256) {
         return (amount * FACTOR) / baseSupplyIndex;
+    }
+
+    // Round outgoing transfers up without adding index - 1 to the scaled amount.
+    function _principalForBorrowUp(uint256 amount) internal view returns (uint256) {
+        if (amount == 0) return 0;
+        return ((amount * FACTOR - 1) / baseBorrowIndex) + 1;
+    }
+
+    function _principalForSupplyUp(uint256 amount) internal view returns (uint256) {
+        if (amount == 0) return 0;
+        return ((amount * FACTOR - 1) / baseSupplyIndex) + 1;
     }
 
     // -------------------------------------------------------------------------------------------
