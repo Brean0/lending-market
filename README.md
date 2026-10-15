@@ -59,6 +59,8 @@ See `script/Deploy.s.sol` for the current staging configuration.
 
 ## Scope
 
+In the hour, I was able to identify 4 P1 issues, 2 P2 Issues, and a number of minor stylistic improvements. This is reflected in 7 PRs that were added. Due to time constraints, not all PRs were merged. Some were left open for a final review, or a refactor. The video below demonstrates my entire process, end-to-end on how I audited the code and coordinated with multiple agents in order to efficiently create remediations for all 6 found bugs. 
+
 **What I prioritized and deliberately left out**
 
 I prioritized protocol solvency, focusing on liquidation accounting errors and validation of stale or invalid oracle data. I deferred position transfers and broader oracle manipulation resistance changes to maintain audit scope.
