@@ -273,7 +273,13 @@ contract LendingMarket {
         uint256 owed = borrowBalanceOf(borrower);
         if (repayAmount > owed) repayAmount = owed;
 
+        uint256 price = getPrice();
+        require(price > 0, "zero price"); // A zero quote cannot price the collateral being seized.
+
+        // Base and collateral units are not interchangeable: convert the incentive-adjusted
+        // base repayment using the 1e18-scaled base-per-collateral price before applying the cap.
         uint256 seizeAmount = (repayAmount * liquidationIncentive) / FACTOR;
+        seizeAmount = (seizeAmount * FACTOR) / price;
         if (seizeAmount > collateralBalance[borrower]) {
             seizeAmount = collateralBalance[borrower];
         }
