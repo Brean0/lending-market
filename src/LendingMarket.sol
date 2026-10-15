@@ -15,6 +15,8 @@ import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
  *
  *      Scaling: all values are 1e18-fixed-point unless stated otherwise. Collateral prices are
  *      quoted by the oracle in base-asset terms, also 1e18.
+ *      Supported assets are 18-decimal, exact-transfer ERC20 contracts returning true or no data.
+ *      Fee-on-transfer and rebasing assets are unsupported: claims must match actual token movement.
  */
 contract LendingMarket {
     // -------------------------------------------------------------------------------------------
@@ -164,7 +166,7 @@ contract LendingMarket {
         require(amount > 0, "zero amount");
         accrueInterest();
 
-        baseToken.transferFrom(msg.sender, address(this), amount);
+        _transferIn(baseToken, msg.sender, amount);
 
         uint256 principal = _principalForSupply(amount);
         supplyPrincipal[msg.sender] += principal;
@@ -183,7 +185,7 @@ contract LendingMarket {
         supplyPrincipal[msg.sender] -= principal;
         totalSupplyPrincipal -= principal;
 
-        baseToken.transfer(msg.sender, amount);
+        _transferOut(baseToken, msg.sender, amount);
 
         emit Withdraw(msg.sender, amount);
     }
@@ -195,7 +197,7 @@ contract LendingMarket {
     function supplyCollateral(uint256 amount) external whenNotPaused {
         require(amount > 0, "zero amount");
 
-        collateralToken.transferFrom(msg.sender, address(this), amount);
+        _transferIn(collateralToken, msg.sender, amount);
 
         collateralBalance[msg.sender] += amount;
         totalCollateral += amount;
@@ -212,7 +214,7 @@ contract LendingMarket {
 
         require(isHealthy(msg.sender), "would be undercollateralized");
 
-        collateralToken.transfer(msg.sender, amount);
+        _transferOut(collateralToken, msg.sender, amount);
 
         emit WithdrawCollateral(msg.sender, amount);
     }
@@ -227,7 +229,7 @@ contract LendingMarket {
 
         require(isHealthy(msg.sender), "would be undercollateralized");
 
-        baseToken.transfer(msg.sender, amount);
+        _transferOut(baseToken, msg.sender, amount);
 
         emit Borrow(msg.sender, amount);
     }
@@ -241,7 +243,7 @@ contract LendingMarket {
 
         uint256 principal = _principalForBorrow(amount);
 
-        baseToken.transferFrom(msg.sender, address(this), amount);
+        _transferIn(baseToken, msg.sender, amount);
 
         borrowPrincipal[msg.sender] -= principal;
         totalBorrowPrincipal -= principal;
@@ -280,8 +282,8 @@ contract LendingMarket {
         collateralBalance[borrower] -= seizeAmount;
         totalCollateral -= seizeAmount;
 
-        baseToken.transferFrom(msg.sender, address(this), repayAmount);
-        collateralToken.transfer(msg.sender, seizeAmount);
+        _transferIn(baseToken, msg.sender, repayAmount);
+        _transferOut(collateralToken, msg.sender, seizeAmount);
 
         emit Liquidate(msg.sender, borrower, repayAmount, seizeAmount);
     }
@@ -341,6 +343,42 @@ contract LendingMarket {
         require(updatedAt <= block.timestamp && updatedAt > 0, "invalid oracle timestamp");
         require(block.timestamp - updatedAt <= maxPriceAge, "stale oracle price");
         return uint256(answer);
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Checked token transfers
+    // -------------------------------------------------------------------------------------------
+
+    function _transferIn(IERC20 token, address from, uint256 amount) internal {
+        uint256 beforeBalance = token.balanceOf(address(this));
+        _callToken(token, abi.encodeCall(IERC20.transferFrom, (from, address(this), amount)));
+        uint256 afterBalance = token.balanceOf(address(this));
+        // Never issue claims or forgive debt for assets the market did not actually receive.
+        require(afterBalance >= beforeBalance && afterBalance - beforeBalance == amount, "inexact transfer");
+    }
+
+    function _transferOut(IERC20 token, address to, uint256 amount) internal {
+        uint256 marketBefore = token.balanceOf(address(this));
+        uint256 recipientBefore = token.balanceOf(to);
+        _callToken(token, abi.encodeCall(IERC20.transfer, (to, amount)));
+        uint256 marketAfter = token.balanceOf(address(this));
+        uint256 recipientAfter = token.balanceOf(to);
+        // Both sides must settle exactly: fees must neither consume reserves nor shortchange recipients.
+        require(
+            marketBefore >= marketAfter && marketBefore - marketAfter == amount
+                && recipientAfter >= recipientBefore && recipientAfter - recipientBefore == amount,
+            "inexact transfer"
+        );
+    }
+
+    function _callToken(IERC20 token, bytes memory data) internal {
+        require(address(token).code.length > 0, "token has no code");
+        (bool success, bytes memory result) = address(token).call(data);
+        // Legacy tokens may omit the return value; all explicit returns must be canonical true.
+        require(
+            success && (result.length == 0 || (result.length == 32 && abi.decode(result, (bool)))),
+            "token transfer failed"
+        );
     }
 
     // -------------------------------------------------------------------------------------------
