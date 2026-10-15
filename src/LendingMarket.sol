@@ -217,12 +217,10 @@ contract LendingMarket {
         emit SupplyCollateral(msg.sender, amount);
     }
 
+    // The modifier includes elapsed debt before health checks so withdrawals cannot use stale debt.
     function withdrawCollateral(uint256 amount) external whenNotPaused accruesInterest {
         require(amount > 0, "zero amount");
         require(collateralBalance[msg.sender] >= amount, "insufficient collateral");
-
-        // Withdrawal health must include elapsed interest so collateral cannot leave against stale debt.
-        accrueInterest();
 
         collateralBalance[msg.sender] -= amount;
         totalCollateral -= amount;
