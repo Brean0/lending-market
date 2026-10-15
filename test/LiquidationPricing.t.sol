@@ -23,11 +23,28 @@ contract LiquidationPricingTest is LendingMarketTest {
         _liquidateAndAssert(5e18, 1e18, 2.2e18);
     }
 
-    function test_liquidationRoundsIncentiveBeforeConvertingUnits() public {
+    function test_liquidationRoundsOnlyAfterConvertingUnits() public {
         _prepareLiquidation(5e18, 0.5e18);
 
-        // floor(19 * 1.1) = 20 base wei, which buys 40 collateral wei at 0.5.
-        _liquidateAndAssert(5e18, 19, 40);
+        // 19 base wei earns 20.9 base wei of collateral: 20.9 / 0.5 = 41.8, rounded down to 41.
+        _liquidateAndAssert(5e18, 19, 41);
+    }
+
+    function test_liquidationPreservesFractionalIncentiveAtPriceBelowOne() public {
+        _prepareLiquidation(5e18, 0.1e18);
+
+        // 1 base wei earns 1.1 base wei of collateral, buying exactly 11 collateral wei at 0.1.
+        _liquidateAndAssert(5e18, 1, 11);
+    }
+
+    function testFuzz_liquidationPreservesFractionalIncentiveAtOneTenthPrice(uint256 repayment) public {
+        repayment = bound(repayment, 1, 1e12);
+        // Exclude whole incentive amounts so every input exercises the former premature floor.
+        if (repayment % 10 == 0) repayment += 1;
+        _prepareLiquidation(5e18, 0.1e18);
+
+        // At this quote, each base wei buys 10 collateral wei plus 1 collateral wei of incentive.
+        _liquidateAndAssert(5e18, repayment, repayment * 11);
     }
 
     function test_liquidationCapsConvertedSeizureAtPostedCollateral() public {
@@ -43,12 +60,13 @@ contract LiquidationPricingTest is LendingMarketTest {
         wethOracle.setPrice(0);
         base.mint(liquidator, 1_000e18);
         vm.startPrank(liquidator);
-        base.approve(address(market), type(uint256).max);
+        base.approve(address(market), 1_000e18);
         vm.expectRevert("invalid oracle answer");
         market.liquidate(borrower, 1_000e18);
         vm.stopPrank();
 
         assertEq(base.balanceOf(liquidator), 1_000e18);
+        assertEq(base.allowance(liquidator, address(market)), 1_000e18, "allowance unchanged on rejection");
         assertEq(base.balanceOf(address(market)), 985_000e18);
         assertEq(market.borrowBalanceOf(borrower), 15_000e18);
         assertEq(market.totalBorrowPrincipal(), 15_000e18);
@@ -64,7 +82,9 @@ contract LiquidationPricingTest is LendingMarketTest {
         // This position is unhealthy throughout the price range, so eligibility cannot hide conversion bugs.
         _prepareLiquidation(15_000e18, price);
 
-        uint256 expectedSeizure = ((repayment * 11 / 10) * 1e18) / price;
+        // Independent rational reference: a 10% bonus is 11/10 of repayment. Bounded products
+        // fit uint256; retaining the rational numerator avoids any intermediate fixed-point floor.
+        uint256 expectedSeizure = (repayment * 11 * 1e18) / (price * 10);
         if (expectedSeizure > 10e18) expectedSeizure = 10e18;
         _liquidateAndAssert(15_000e18, repayment, expectedSeizure);
     }
@@ -80,11 +100,12 @@ contract LiquidationPricingTest is LendingMarketTest {
     function _liquidateAndAssert(uint256 debt, uint256 repayment, uint256 expectedSeizure) internal {
         base.mint(liquidator, repayment);
         vm.startPrank(liquidator);
-        base.approve(address(market), type(uint256).max);
+        base.approve(address(market), repayment);
         market.liquidate(borrower, repayment);
         vm.stopPrank();
 
         assertEq(base.balanceOf(liquidator), 0, "liquidator base spent");
+        assertEq(base.allowance(liquidator, address(market)), 0, "exact repayment allowance spent");
         assertEq(base.balanceOf(address(market)), 1_000_000e18 - debt + repayment, "market base received");
         assertEq(base.balanceOf(borrower), debt, "borrower base unchanged");
         assertEq(market.borrowBalanceOf(borrower), debt - repayment, "borrower debt reduced");
