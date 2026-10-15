@@ -103,6 +103,12 @@ contract LendingMarket {
         _;
     }
 
+    modifier accruesInterest() {
+        // Initialization establishes the indices; never accrue against unset market state.
+        if (_initialized) _accrueInterest();
+        _;
+    }
+
     // -------------------------------------------------------------------------------------------
     // Initialization
     // -------------------------------------------------------------------------------------------
@@ -143,7 +149,10 @@ contract LendingMarket {
     // -------------------------------------------------------------------------------------------
 
     /// @notice Advances both indices to the current block timestamp.
-    function accrueInterest() public {
+    function accrueInterest() public accruesInterest {}
+
+    // Use an internal helper so modifier-driven entry points cannot recurse through accrueInterest.
+    function _accrueInterest() internal {
         uint256 elapsed = block.timestamp - lastAccrualTime;
         if (elapsed == 0) return;
 
@@ -166,9 +175,8 @@ contract LendingMarket {
     // Supplier actions
     // -------------------------------------------------------------------------------------------
 
-    function supply(uint256 amount) external whenNotPaused {
+    function supply(uint256 amount) external whenNotPaused accruesInterest {
         require(amount > 0, "zero amount");
-        accrueInterest();
 
         baseToken.safeTransferFrom(msg.sender, address(this), amount);
 
@@ -179,9 +187,8 @@ contract LendingMarket {
         emit Supply(msg.sender, amount);
     }
 
-    function withdraw(uint256 amount) external whenNotPaused {
+    function withdraw(uint256 amount) external whenNotPaused accruesInterest {
         require(amount > 0, "zero amount");
-        accrueInterest();
 
         // Base leaving the market must debit enough principal to cover the transfer.
         uint256 principal = _principalForSupplyUp(amount);
@@ -199,7 +206,7 @@ contract LendingMarket {
     // Borrower actions
     // -------------------------------------------------------------------------------------------
 
-    function supplyCollateral(uint256 amount) external whenNotPaused {
+    function supplyCollateral(uint256 amount) external whenNotPaused accruesInterest {
         require(amount > 0, "zero amount");
 
         collateralToken.safeTransferFrom(msg.sender, address(this), amount);
@@ -210,12 +217,10 @@ contract LendingMarket {
         emit SupplyCollateral(msg.sender, amount);
     }
 
-    function withdrawCollateral(uint256 amount) external whenNotPaused {
+    // The modifier includes elapsed debt before health checks so withdrawals cannot use stale debt.
+    function withdrawCollateral(uint256 amount) external whenNotPaused accruesInterest {
         require(amount > 0, "zero amount");
         require(collateralBalance[msg.sender] >= amount, "insufficient collateral");
-
-        // Withdrawal health must include elapsed interest so collateral cannot leave against stale debt.
-        accrueInterest();
 
         collateralBalance[msg.sender] -= amount;
         totalCollateral -= amount;
@@ -227,9 +232,8 @@ contract LendingMarket {
         emit WithdrawCollateral(msg.sender, amount);
     }
 
-    function borrow(uint256 amount) external whenNotPaused {
+    function borrow(uint256 amount) external whenNotPaused accruesInterest {
         require(amount > 0, "zero amount");
-        accrueInterest();
 
         // Base leaving the market must create debt for the entire transfer, even for one wei.
         uint256 principal = _principalForBorrowUp(amount);
@@ -243,9 +247,8 @@ contract LendingMarket {
         emit Borrow(msg.sender, amount);
     }
 
-    function repay(uint256 amount) external {
+    function repay(uint256 amount) external accruesInterest {
         require(amount > 0, "zero amount");
-        accrueInterest();
 
         uint256 owed = borrowBalanceOf(msg.sender);
         if (amount > owed) amount = owed;
@@ -271,9 +274,8 @@ contract LendingMarket {
      * @param borrower the account being liquidated
      * @param repayAmount how much of the borrower's debt the liquidator is repaying
      */
-    function liquidate(address borrower, uint256 repayAmount) external whenNotPaused {
+    function liquidate(address borrower, uint256 repayAmount) external whenNotPaused accruesInterest {
         require(repayAmount > 0, "zero amount");
-        accrueInterest();
 
         require(!isHealthy(borrower), "borrower is healthy");
 
@@ -399,15 +401,14 @@ contract LendingMarket {
         emit OracleUpdated(newOracle);
     }
 
+    // Settle elapsed debt at the old rate before installing the new parameters.
     function setParameters(
         uint256 collateralFactor_,
         uint256 liquidationIncentive_,
         uint256 borrowRatePerSecond_
-    ) external onlyAdmin {
+    ) external onlyAdmin accruesInterest {
         require(collateralFactor_ <= FACTOR, "cf too high");
         require(liquidationIncentive_ >= FACTOR, "incentive below par");
-
-        accrueInterest();
 
         collateralFactor = collateralFactor_;
         liquidationIncentive = liquidationIncentive_;
