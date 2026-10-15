@@ -48,7 +48,9 @@ contract Deploy {
                 collateralFactor,
                 incentive,
                 // ~5% APR expressed per second
-                uint256(0.05e18) / 365 days
+                uint256(0.05e18) / 365 days,
+                // Explicit freshness policy for this listed feed; match its heartbeat.
+                1 hours
             )
         );
 
