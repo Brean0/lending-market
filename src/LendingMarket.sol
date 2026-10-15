@@ -16,8 +16,8 @@ import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
  *
  *      Scaling: all values are 1e18-fixed-point unless stated otherwise. Collateral prices are
  *      quoted by the oracle in base-asset terms, also 1e18.
- *      Supported assets are 18-decimal, exact-transfer ERC20 contracts returning true or no data.
- *      Fee-on-transfer and rebasing assets are unsupported: claims must match actual token movement.
+ *      Listed assets must be standard 18-decimal ERC20 contracts without transfer fees or rebasing.
+ *      SafeERC20 validates transfer call results; accounting assumes the requested amount moves.
  */
 contract LendingMarket {
     using SafeERC20 for IERC20;
@@ -169,10 +169,7 @@ contract LendingMarket {
         require(amount > 0, "zero amount");
         accrueInterest();
 
-        uint256 balanceBefore = baseToken.balanceOf(address(this));
         baseToken.safeTransferFrom(msg.sender, address(this), amount);
-        // SafeERC20 checks call success; exact receipt prevents unfunded claims or debt forgiveness.
-        require(baseToken.balanceOf(address(this)) == balanceBefore + amount, "inexact transfer");
 
         uint256 principal = _principalForSupply(amount);
         supplyPrincipal[msg.sender] += principal;
@@ -191,15 +188,7 @@ contract LendingMarket {
         supplyPrincipal[msg.sender] -= principal;
         totalSupplyPrincipal -= principal;
 
-        uint256 marketBefore = baseToken.balanceOf(address(this));
-        uint256 recipientBefore = baseToken.balanceOf(msg.sender);
         baseToken.safeTransfer(msg.sender, amount);
-        // Reject both sender surcharges and recipient fees: reserves and payouts must settle exactly.
-        require(
-            baseToken.balanceOf(address(this)) + amount == marketBefore
-                && baseToken.balanceOf(msg.sender) == recipientBefore + amount,
-            "inexact transfer"
-        );
 
         emit Withdraw(msg.sender, amount);
     }
@@ -211,10 +200,7 @@ contract LendingMarket {
     function supplyCollateral(uint256 amount) external whenNotPaused {
         require(amount > 0, "zero amount");
 
-        uint256 balanceBefore = collateralToken.balanceOf(address(this));
         collateralToken.safeTransferFrom(msg.sender, address(this), amount);
-        // SafeERC20 checks call success; exact receipt prevents unfunded claims or debt forgiveness.
-        require(collateralToken.balanceOf(address(this)) == balanceBefore + amount, "inexact transfer");
 
         collateralBalance[msg.sender] += amount;
         totalCollateral += amount;
@@ -231,15 +217,7 @@ contract LendingMarket {
 
         require(isHealthy(msg.sender), "would be undercollateralized");
 
-        uint256 marketBefore = collateralToken.balanceOf(address(this));
-        uint256 recipientBefore = collateralToken.balanceOf(msg.sender);
         collateralToken.safeTransfer(msg.sender, amount);
-        // Reject both sender surcharges and recipient fees: reserves and payouts must settle exactly.
-        require(
-            collateralToken.balanceOf(address(this)) + amount == marketBefore
-                && collateralToken.balanceOf(msg.sender) == recipientBefore + amount,
-            "inexact transfer"
-        );
 
         emit WithdrawCollateral(msg.sender, amount);
     }
@@ -254,15 +232,7 @@ contract LendingMarket {
 
         require(isHealthy(msg.sender), "would be undercollateralized");
 
-        uint256 marketBefore = baseToken.balanceOf(address(this));
-        uint256 recipientBefore = baseToken.balanceOf(msg.sender);
         baseToken.safeTransfer(msg.sender, amount);
-        // Reject both sender surcharges and recipient fees: reserves and payouts must settle exactly.
-        require(
-            baseToken.balanceOf(address(this)) + amount == marketBefore
-                && baseToken.balanceOf(msg.sender) == recipientBefore + amount,
-            "inexact transfer"
-        );
 
         emit Borrow(msg.sender, amount);
     }
@@ -276,10 +246,7 @@ contract LendingMarket {
 
         uint256 principal = _principalForBorrow(amount);
 
-        uint256 balanceBefore = baseToken.balanceOf(address(this));
         baseToken.safeTransferFrom(msg.sender, address(this), amount);
-        // SafeERC20 checks call success; exact receipt prevents unfunded claims or debt forgiveness.
-        require(baseToken.balanceOf(address(this)) == balanceBefore + amount, "inexact transfer");
 
         borrowPrincipal[msg.sender] -= principal;
         totalBorrowPrincipal -= principal;
@@ -318,19 +285,8 @@ contract LendingMarket {
         collateralBalance[borrower] -= seizeAmount;
         totalCollateral -= seizeAmount;
 
-        uint256 balanceBefore = baseToken.balanceOf(address(this));
         baseToken.safeTransferFrom(msg.sender, address(this), repayAmount);
-        // SafeERC20 checks call success; exact receipt prevents unfunded claims or debt forgiveness.
-        require(baseToken.balanceOf(address(this)) == balanceBefore + repayAmount, "inexact transfer");
-        uint256 marketBefore = collateralToken.balanceOf(address(this));
-        uint256 recipientBefore = collateralToken.balanceOf(msg.sender);
         collateralToken.safeTransfer(msg.sender, seizeAmount);
-        // Reject both sender surcharges and recipient fees: reserves and payouts must settle exactly.
-        require(
-            collateralToken.balanceOf(address(this)) + seizeAmount == marketBefore
-                && collateralToken.balanceOf(msg.sender) == recipientBefore + seizeAmount,
-            "inexact transfer"
-        );
 
         emit Liquidate(msg.sender, borrower, repayAmount, seizeAmount);
     }

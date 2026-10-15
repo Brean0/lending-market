@@ -18,10 +18,7 @@ contract TransferTestToken {
         LongReturn,
         LongFalseReturn,
         InvalidBool,
-        RecipientFee,
-        SenderFee,
-        Revert,
-        NoMovement
+        Revert
     }
     Mode public mode;
     uint8 public constant decimals = 18;
@@ -53,10 +50,8 @@ contract TransferTestToken {
     function _transfer(address from, address to, uint256 amount) internal returns (bool) {
         require(mode != Mode.Revert, "token reverted");
         if (mode == Mode.False) return false;
-        if (mode == Mode.NoMovement) return true;
-        uint256 fee = amount / 100;
-        balanceOf[from] -= amount + (mode == Mode.SenderFee ? fee : 0);
-        balanceOf[to] += amount - (mode == Mode.RecipientFee ? fee : 0);
+        balanceOf[from] -= amount;
+        balanceOf[to] += amount;
         if (mode == Mode.FalseAfterMove) return false;
         if (mode == Mode.NoReturn) assembly { return(0, 0) }
         if (mode == Mode.ShortReturn) {
@@ -208,8 +203,6 @@ contract TokenTransfersTest is Test {
 
     function _rejectEveryPath(TransferTestToken.Mode mode) internal {
         for (uint256 path; path < 8; ++path) {
-            // Sender surcharges matter on outgoing transfers: the market must debit exactly the claim.
-            if (mode == TransferTestToken.Mode.SenderFee && path != 1 && path != 3 && path != 4 && path != 7) continue;
             uint256 snapshot = vm.snapshotState();
             _prepare(path);
             _token(path).setMode(mode);
@@ -217,11 +210,6 @@ contract TokenTransfersTest is Test {
             if (mode == TransferTestToken.Mode.Revert) {
                 // SafeERC20 preserves the token's own reason for failed calls.
                 vm.expectRevert(bytes("token reverted"));
-            } else if (
-                mode == TransferTestToken.Mode.RecipientFee || mode == TransferTestToken.Mode.SenderFee
-                    || mode == TransferTestToken.Mode.NoMovement
-            ) {
-                vm.expectRevert(bytes("inexact transfer"));
             } else {
                 vm.expectRevert(
                     abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(_token(path)))
@@ -258,20 +246,8 @@ contract TokenTransfersTest is Test {
         _rejectEveryPath(TransferTestToken.Mode.InvalidBool);
     }
 
-    function test_recipientFeeRollsBackEveryPath() public {
-        _rejectEveryPath(TransferTestToken.Mode.RecipientFee);
-    }
-
-    function test_senderFeeRollsBackEveryOutgoingPath() public {
-        _rejectEveryPath(TransferTestToken.Mode.SenderFee);
-    }
-
     function test_revertingTokenRollsBackEveryPath() public {
         _rejectEveryPath(TransferTestToken.Mode.Revert);
-    }
-
-    function test_successWithoutMovementRollsBackEveryPath() public {
-        _rejectEveryPath(TransferTestToken.Mode.NoMovement);
     }
 
     function _acceptEveryPath(TransferTestToken.Mode mode) internal {
