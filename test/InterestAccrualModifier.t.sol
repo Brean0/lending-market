@@ -60,7 +60,7 @@ contract InterestAccrualModifierTest is LendingMarketTest {
         MockOracle replacement = new MockOracle(2_000e18);
         Accrual memory expected = _advanceTime();
         vm.prank(admin);
-        market.setOracle(address(replacement));
+        market.setOracle(address(replacement), 1 hours);
         assertEq(address(market.oracle()), address(replacement));
         _assertAccrual(expected);
     }
@@ -168,7 +168,8 @@ contract InterestAccrualModifierTest is LendingMarketTest {
             address(weth),
             0.8e18,
             1.1e18,
-            RATE_PER_SECOND
+            RATE_PER_SECOND,
+            1 hours
         );
         assertEq(fresh.baseBorrowIndex(), FACTOR);
         assertEq(fresh.baseSupplyIndex(), FACTOR);
@@ -181,7 +182,7 @@ contract InterestAccrualModifierTest is LendingMarketTest {
             Accrual(market.baseBorrowIndex(), market.baseSupplyIndex(), market.lastAccrualTime());
         _advanceTime();
         vm.expectRevert("already initialized");
-        market.initialize(supplier, borrower, address(0), address(0), address(0), 0, 0, 0);
+        market.initialize(supplier, borrower, address(0), address(0), address(0), 0, 0, 0, 1 hours);
         _assertAccrual(before);
         assertEq(market.admin(), admin);
         assertEq(address(market.oracle()), address(wethOracle));
@@ -222,7 +223,7 @@ contract InterestAccrualModifierTest is LendingMarketTest {
         _assertAccrual(expected);
         expected = _advanceTime();
         vm.prank(admin);
-        market.setOracle(address(wethOracle));
+        market.setOracle(address(wethOracle), 1 hours);
         _assertAccrual(expected);
         expected = _advanceTime();
         vm.prank(admin);
@@ -258,7 +259,7 @@ contract InterestAccrualModifierTest is LendingMarketTest {
         vm.expectRevert("paused");
         market.liquidate(borrower, 1e18);
         vm.expectRevert("not admin");
-        market.setOracle(address(wethOracle));
+        market.setOracle(address(wethOracle), 1 hours);
         vm.expectRevert("not guardian");
         market.setPaused(false);
         vm.expectRevert("not admin");
@@ -284,9 +285,9 @@ contract InterestAccrualModifierTest is LendingMarketTest {
         market.setPaused(false);
         vm.prank(guardian);
         vm.expectRevert("not admin");
-        market.setOracle(address(wethOracle));
+        market.setOracle(address(wethOracle), 1 hours);
         vm.expectRevert("not admin");
-        market.setOracle(address(wethOracle));
+        market.setOracle(address(wethOracle), 1 hours);
         vm.expectRevert("not admin");
         market.setAdmin(supplier);
         vm.expectRevert("not admin");
