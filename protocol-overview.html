@@ -1,0 +1,782 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <link rel="icon" href="data:,">
+  <title>LendingMarket — Architecture, flows and tests</title>
+  <style>
+    :root{--ink:#142b46;--muted:#4d6074;--blue:#1859a6;--purple:#7149a0;--paper:#fff;--wash:#f0f5fb;--line:#d2deec;--amber:#8b420b;--amber-wash:#fff4e7;--green:#216548}
+    *{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:25px}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.65 "Avenir Next","Segoe UI",Arial,sans-serif}a{color:var(--blue);text-underline-offset:3px}a:hover{text-decoration-thickness:2px}button,input{font:inherit}a:focus-visible,button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid var(--blue);outline-offset:4px}code,.formula{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}code{font-size:.88em;overflow-wrap:anywhere}p{max-width:80ch;margin:.65em 0 1em}h1,h2,h3{line-height:1.18;letter-spacing:-.025em}h1{font-size:clamp(38px,5vw,64px);max-width:14ch;margin:16px 0 22px}h2{font-size:31px;margin:0 0 22px}h3{font-size:21px;margin:26px 0 10px}strong{font-weight:650}small,.small{font-size:13px;line-height:1.5}.muted{color:var(--muted)}
+    .shell{display:grid;grid-template-columns:225px minmax(0,1120px);gap:50px;max-width:1460px;padding:40px 48px 70px;margin:auto}.rail{align-self:start;position:sticky;top:30px}.wordmark{font-size:21px;font-weight:750;letter-spacing:-.04em}.rail p{font-size:13px;color:var(--muted);margin:8px 0 28px}.rail nav{display:grid;gap:7px}.rail nav a{display:block;text-decoration:none;font-size:14px;padding:8px 10px;border-left:2px solid transparent}.rail nav a:hover{background:var(--wash);border-color:var(--blue)}.rail .footnote{border-top:1px solid var(--line);padding-top:18px;margin-top:27px}.hero{padding:14px 0 35px}.lead{font-size:21px;line-height:1.55;max-width:65ch}.metadata{display:flex;flex-wrap:wrap;gap:10px 25px;color:var(--muted);font-size:13px}.summary{padding:22px 26px;background:var(--wash);border-left:4px solid var(--blue);margin-top:26px}.summary p:last-child{margin-bottom:0}section{padding:38px 0;border-top:1px solid var(--line)}.cols>*{min-width:0}.cols{display:grid;grid-template-columns:1fr 1fr;gap:32px}.diagram{overflow-x:auto;margin:24px 0 15px;border:1px solid var(--line);background:linear-gradient(180deg,#f6f9fd,#fff)}.diagram svg{display:block;min-width:800px;width:100%;height:auto}.legend{display:flex;gap:22px;flex-wrap:wrap;font-size:13px;color:var(--muted)}.legend span:before{content:"";display:inline-block;width:20px;height:3px;background:var(--blue);margin:0 8px 4px 0}.legend .collateral:before{background:var(--purple)}.legend .control:before{background:var(--muted)}
+    .table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:14px;text-align:left}th{font-weight:650;background:var(--wash)}td,th{padding:14px 15px;vertical-align:top;border-bottom:1px solid var(--line)}th:first-child,td:first-child{padding-left:10px}td p{margin:0}td code{font-size:12px}.source{font-size:12px;color:var(--muted);display:block;margin-top:8px}.source a{color:var(--muted)}.formula{background:var(--wash);padding:18px 20px;border-left:3px solid var(--blue);font-size:14px;line-height:1.9;overflow-x:auto;white-space:pre-wrap;margin:16px 0}.note{background:var(--wash);padding:17px 21px;margin:20px 0}.critical{background:var(--amber-wash);border-left:4px solid var(--amber);padding:21px 25px;margin:22px 0}.critical h3{margin:0 0 10px;color:var(--amber)}.critical p:last-child{margin-bottom:0}.finding{display:grid;grid-template-columns:230px 1fr;gap:25px;padding:23px 0;border-bottom:1px solid var(--line)}.finding h3{margin:0;font-size:19px}.finding p{margin:0}.finding:last-child{border:0}.steps{padding-left:24px}.steps li{padding:0 0 12px 8px}.pill{display:inline-block;background:#e7f0e9;color:var(--green);padding:4px 10px;font-size:13px;font-weight:650;border-radius:4px}.calc{margin:25px 0;padding:27px;background:var(--wash);border:1px solid var(--line)}.calc h3{margin-top:0}.calc-grid{display:grid;grid-template-columns:1fr 1fr;gap:35px}.calc label{display:block;font-weight:650;margin:0 0 15px}.calc label span{display:block;font-weight:400;font-size:13px;color:var(--muted)}input[type=range]{width:100%;accent-color:var(--blue);margin:16px 0 10px}output{font-variant-numeric:tabular-nums}.price-reading{font-size:34px;font-weight:700}.metric{display:flex;justify-content:space-between;gap:15px;border-bottom:1px solid var(--line);padding:9px 0;font-size:14px}.metric strong{font-variant-numeric:tabular-nums}.status{font-weight:650;margin:14px 0;color:var(--green)}.status.bad{color:var(--amber)}.bar-label{font-size:13px;margin-top:12px}.bar{height:12px;background:#dbe5f1;border-radius:3px;overflow:hidden;margin-top:4px}.bar div{height:100%;background:var(--blue)}.bar.debt div{background:var(--purple)}.calc button,.print{border:1px solid var(--blue);background:white;color:var(--blue);padding:7px 13px;cursor:pointer;border-radius:4px;font-size:13px;margin:8px 7px 0 0}.print{margin-top:18px}.calc .small{margin-top:17px}.test-note{font-size:14px;padding:17px 20px;border-left:3px solid var(--green);background:#edf5f0;margin:20px 0}.sources details{border-bottom:1px solid var(--line);padding:13px 0}.sources summary{cursor:pointer;font-weight:600}.sources pre{font-size:12px;line-height:1.55;padding:18px;background:var(--wash);overflow:auto;max-height:500px}.sources code{overflow-wrap:normal}.source-index{font-size:14px}.footer{padding-top:25px;font-size:13px;color:var(--muted)}
+    @media(max-width:1100px){.shell{grid-template-columns:180px minmax(0,1fr);gap:25px;padding:30px 28px}.cols,.calc-grid{gap:22px}.finding{grid-template-columns:190px 1fr}}
+    @media(max-width:800px){.shell{display:block;padding:24px 20px 45px}.rail{position:static;border-bottom:1px solid var(--line);padding-bottom:19px}.rail p{margin:4px 0 12px}.rail nav{display:flex;flex-wrap:wrap;gap:3px 8px}.rail nav a{font-size:12px;padding:4px 0;border:0}.rail .footnote,.print{display:none}.hero{padding-top:30px}.lead{font-size:18px}h2{font-size:27px}.cols,.calc-grid{grid-template-columns:1fr}.finding{display:block}.finding h3{margin-bottom:10px}.table-wrap table{min-width:660px}.calc{padding:20px}.metadata{gap:8px 15px}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+    @media print{body{font:11px/1.5 Arial,sans-serif}.shell{display:block;padding:0;max-width:none}.rail,.calc button{display:none}h1{font-size:35px;max-width:none}h2{font-size:23px}h3{font-size:16px}.hero{padding:0 0 20px}section{padding:22px 0}table{font-size:10px}.table-wrap{overflow:visible}.diagram svg{min-width:0}.finding{grid-template-columns:170px 1fr}.calc,.critical,.summary,tr{break-inside:avoid}.sources details{display:block}.sources pre{max-height:none;white-space:pre-wrap}a{color:inherit}.source{font-size:9px}.metadata{font-size:10px}}
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside class="rail" aria-label="Report navigation">
+    <div class="wordmark">LendingMarket</div>
+    <p>A guide to the checked-in protocol</p>
+    <nav>
+      <a href="#overview">Overview</a><a href="#architecture">Architecture</a><a href="#flows">Inputs &amp; outputs</a><a href="#accounting">Accounting &amp; interest</a><a href="#liquidation">Health &amp; liquidation</a><a href="#critical">Critical design points</a><a href="#deployment">Deployment &amp; control</a><a href="#tests">Test contract overview</a><a href="#sources">Source references</a>
+    </nav>
+    <p class="footnote">Reviewed October 14, 2026.<br>Based on this workspace’s source and test suite.</p>
+    <button class="print" type="button" id="print-report">Print / save as PDF</button>
+  </aside>
+  <main>
+    <header class="hero" id="overview">
+      <div class="metadata"><span>Solidity 0.8.24</span><span>One base asset + one collateral asset</span><span>Upgradeable market</span></div>
+      <h1>How the lending market works</h1>
+      <p class="lead">Suppliers fund a shared pool of base tokens. Borrowers lock collateral and draw from that pool. Two global indices track interest, while an oracle and collateral factor determine borrowing power.</p>
+      <div class="summary">
+        <p><strong>The key mental model:</strong> the proxy holds the tokens and account state; <code>LendingMarket</code> supplies the logic. Supply balances, debt balances and available cash are separate quantities.</p>
+        <p>The basic design is small and readable. Several implementation details materially affect its behavior, especially liquidation pricing, principal rounding, oracle handling and guardian permissions. This report describes the actual code and identifies where it diverges from the documented design.</p>
+      </div>
+    </header>
+
+    <section id="architecture">
+      <h2>Architecture and custody</h2>
+      <p>Each market instance is configured with one ERC20 base token, one ERC20 collateral token and one price oracle. The staging helper uses bUSD as the base and WETH as collateral. There is no multi-asset portfolio engine, share-token contract or separate vault in this implementation.</p>
+      <div class="diagram">
+        <svg viewBox="0 0 1200 470" role="img" aria-labelledby="diagram-title diagram-description">
+          <title id="diagram-title">LendingMarket architecture</title>
+          <desc id="diagram-description">Suppliers deposit and withdraw base tokens at the proxy. Borrowers deposit collateral, borrow base and repay base. Liquidators pay base and receive collateral. The proxy delegates logic to LendingMarket, while custody and storage stay at the proxy. The oracle supplies price data.</desc>
+          <defs><marker id="arrow-blue" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#1859a6"/></marker><marker id="arrow-purple" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#7149a0"/></marker><marker id="arrow-gray" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#4d6074"/></marker></defs>
+          <rect x="440" y="20" width="320" height="61" rx="6" fill="#fff" stroke="#d2deec"/><text x="600" y="46" text-anchor="middle" font-size="19" font-weight="650" fill="#142b46">Price oracle</text><text x="600" y="67" text-anchor="middle" font-size="14" fill="#4d6074">Collateral price in base units</text><path d="M600 82 V126" fill="none" stroke="#4d6074" stroke-width="2" marker-end="url(#arrow-gray)"/>
+          <rect x="400" y="130" width="400" height="184" rx="8" fill="#e9f1fc" stroke="#1859a6" stroke-width="2"/><text x="600" y="169" text-anchor="middle" font-size="26" font-weight="700" fill="#142b46">Market proxy</text><text x="600" y="198" text-anchor="middle" font-size="16" fill="#142b46">User-facing address + token custody</text><path d="M426 218 H774" stroke="#b4c9e3"/><text x="600" y="247" text-anchor="middle" font-size="15" fill="#142b46">Supply principal · Borrow principal</text><text x="600" y="273" text-anchor="middle" font-size="15" fill="#142b46">Collateral balances · Indices · Parameters</text>
+          <rect x="30" y="154" width="228" height="97" rx="6" fill="#fff" stroke="#d2deec"/><text x="144" y="191" text-anchor="middle" font-size="21" font-weight="650" fill="#142b46">Suppliers</text><text x="144" y="220" text-anchor="middle" font-size="15" fill="#4d6074">Earn on base balances</text><path d="M260 178 H395" stroke="#1859a6" stroke-width="2" marker-end="url(#arrow-blue)"/><text x="327" y="164" text-anchor="middle" font-size="13" fill="#1859a6">Supply base</text><path d="M398 228 H263" stroke="#1859a6" stroke-width="2" marker-end="url(#arrow-blue)"/><text x="329" y="249" text-anchor="middle" font-size="13" fill="#1859a6">Withdraw base</text>
+          <rect x="950" y="140" width="220" height="116" rx="6" fill="#fff" stroke="#d2deec"/><text x="1060" y="177" text-anchor="middle" font-size="21" font-weight="650" fill="#142b46">Borrowers</text><text x="1060" y="206" text-anchor="middle" font-size="15" fill="#4d6074">Post collateral</text><text x="1060" y="230" text-anchor="middle" font-size="15" fill="#4d6074">Carry base debt</text><path d="M802 164 H945" stroke="#1859a6" stroke-width="2" marker-end="url(#arrow-blue)"/><text x="873" y="150" text-anchor="middle" font-size="13" fill="#1859a6">Borrow base</text><path d="M948 209 H806" stroke="#1859a6" stroke-width="2" marker-end="url(#arrow-blue)"/><text x="874" y="199" text-anchor="middle" font-size="13" fill="#1859a6">Repay base</text><path d="M970 257 L804 295" stroke="#7149a0" stroke-width="2" marker-end="url(#arrow-purple)"/><text x="934" y="292" text-anchor="middle" font-size="13" fill="#7149a0">Collateral in / out</text>
+          <rect x="440" y="385" width="320" height="61" rx="6" fill="#fff" stroke="#d2deec"/><text x="600" y="411" text-anchor="middle" font-size="19" font-weight="650" fill="#142b46">LendingMarket implementation</text><text x="600" y="432" text-anchor="middle" font-size="14" fill="#4d6074">Executes in the proxy’s storage context</text><path d="M600 316 V379" stroke="#4d6074" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrow-gray)"/><text x="616" y="351" font-size="13" fill="#4d6074">delegatecall</text>
+          <rect x="950" y="356" width="220" height="86" rx="6" fill="#fff" stroke="#d2deec"/><text x="1060" y="391" text-anchor="middle" font-size="21" font-weight="650" fill="#142b46">Liquidators</text><text x="1060" y="418" text-anchor="middle" font-size="15" fill="#4d6074">Anyone may participate</text><path d="M949 365 L804 310" stroke="#1859a6" stroke-width="2" marker-end="url(#arrow-blue)"/><path d="M801 324 L945 395" stroke="#7149a0" stroke-width="2" marker-end="url(#arrow-purple)"/><text x="885" y="329" text-anchor="middle" font-size="13" fill="#1859a6">Base in</text><text x="857" y="384" text-anchor="middle" font-size="13" fill="#7149a0">Collateral out</text>
+        </svg>
+      </div>
+      <div class="legend"><span>Base token movement</span><span class="collateral">Collateral movement</span><span class="control">Data / execution</span></div>
+      <div class="cols">
+        <div><h3>Execution layer</h3><p>Users call the proxy address. Its fallback delegates to <code>LendingMarket</code>, preserving the caller and using the proxy’s storage. Upgrades replace the logic address without moving balances or tokens.</p></div>
+        <div><h3>State layer</h3><p>Per-account mappings record supply principal, borrow principal and collateral. Global totals and indices allow balances to grow without updating every account. Supplier claims are internal records and have no transfer function.</p></div>
+      </div>
+      <span class="source"><a href="#src-state">LendingMarket.sol:30–60</a>; <a href="#src-proxy">TransparentUpgradeableProxy.sol:21–62</a></span>
+    </section>
+
+    <section id="flows">
+      <h2>Protocol inputs and outputs</h2>
+      <p>Users supply token amounts in raw ERC20 units and approve the <strong>proxy address</strong> for incoming transfers. With the staging assets, <code>1e18</code> raw units means one token. User mutation functions return no Solidity value; their outputs are token transfers, changed storage and events. A reverting call rolls back its effects.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Action / input</th><th>What enters or leaves</th><th>State and conditions</th><th>Event</th></tr></thead>
+        <tbody>
+          <tr><td><code>supply(amount)</code></td><td>Base enters the pool from caller.</td><td>Accrue interest; credit caller’s supply principal. Positive amount; unpaused.</td><td><code>Supply</code></td></tr>
+          <tr><td><code>withdraw(amount)</code></td><td>Base leaves the pool for caller.</td><td>Accrue; debit supply principal; check principal balance. Needs available token liquidity; unpaused.</td><td><code>Withdraw</code></td></tr>
+          <tr><td><code>supplyCollateral(amount)</code></td><td>Collateral enters custody.</td><td>Credit collateral balance and total collateral. No interest accrual; unpaused.</td><td><code>SupplyCollateral</code></td></tr>
+          <tr><td><code>withdrawCollateral(amount)</code></td><td>Collateral returns to caller.</td><td>Debit collateral; check health afterward. <strong>Does not accrue interest first.</strong> Unpaused.</td><td><code>WithdrawCollateral</code></td></tr>
+          <tr><td><code>borrow(amount)</code></td><td>Base leaves the pool for caller.</td><td>Accrue; add debt principal; require health afterward. Needs available liquidity; unpaused.</td><td><code>Borrow</code></td></tr>
+          <tr><td><code>repay(amount)</code></td><td>Caller’s base enters the pool, capped to their debt.</td><td>Accrue; reduce own debt principal. <strong>Allowed while paused.</strong> Positive input can be capped to zero for a debt-free account.</td><td><code>Repay</code>, using capped amount</td></tr>
+          <tr><td><code>liquidate(borrower, repayAmount)</code></td><td>Liquidator pays base and receives borrower’s collateral.</td><td>Accrue; require unhealthy borrower; cap repayment to debt and seizure to collateral. Unpaused.</td><td><code>Liquidate</code>, with repayment and seizure</td></tr>
+          <tr><td><code>accrueInterest()</code></td><td>No tokens move.</td><td>Advance indices and accrual timestamp. Anyone may call, including while paused.</td><td>No event</td></tr>
+        </tbody>
+      </table></div>
+      <p class="small muted">All token-amount actions require a positive input. Ordinary supply, withdrawal, borrowing and repayment act on <code>msg.sender</code>; there is no “on behalf of” argument. Liquidation reduces another account’s debt.</p>
+      <h3>Other external inputs</h3>
+      <p>The oracle supplies a signed price answer; <code>block.timestamp</code> supplies elapsed time. Initialization supplies five addresses and three risk/rate values. Administrators can subsequently change the oracle, collateral factor, incentive, borrowing rate and pause state; the proxy admin can change implementation code.</p>
+      <h3>Read outputs</h3>
+      <p><code>supplyBalanceOf(account)</code> and <code>borrowBalanceOf(account)</code> return raw base amounts. <code>isHealthy(account)</code> returns a boolean. <code>getPrice()</code> and <code>utilization()</code> return values expected to use 1e18 scaling. Public getters expose principal, collateral, totals, indices, addresses and parameters. These balance/health views use the <strong>last stored indices</strong>, so they exclude interest since the last accrual.</p>
+      <span class="source"><a href="#src-user-actions">LendingMarket.sol:156–243</a>; <a href="#src-liquidation">255–280</a>; <a href="#src-views">286–325</a></span>
+    </section>
+
+    <section id="accounting">
+      <h2>Accounting and interest</h2>
+      <p>Let <code>F = 1e18</code>. Principal is a normalized bookkeeping balance. The index converts it into the current token-denominated claim or debt. Both indices start at <code>F</code>.</p>
+      <div class="formula">Supply balance = floor(supply principal × supply index / F)
+Borrow balance = floor(borrow principal × borrow index / F)
+Principal for an amount = floor(amount × F / relevant index)</div>
+      <p>For example, 1,000 principal units at a supply index of 1.05 represent a 1,050-base claim, before integer rounding. This is how account balances grow while the account’s principal remains unchanged.</p>
+      <h3>How an accrual advances the indices</h3>
+      <p>The borrowing rate is fixed by the admin. Utilization is reported as a view but does not set that rate. For one accrual interval, the code reads total debt <code>B</code> and total supply claims <code>S</code> using the old indices:</p>
+      <div class="formula">Δt = current timestamp − last accrual timestamp
+i = rate per second × Δt                    [1e18 scaled]
+New borrow index = old borrow index + floor(old borrow index × i / F)
+A = floor(B × i / F)                        [interest allocated to suppliers]
+If S &gt; 0:
+  New supply index = old supply index + floor(old supply index × A / S)</div>
+      <p>Interest is linear within an interval and compounds across successive accruals. With a 5% annualized rate, 100,000 base of debt and 1,000,000 base of supply claims, a single year-long interval adds roughly 5,000 to debt and to aggregate supplier claims: roughly 0.5% supplier return at 10% starting utilization. Rounding and call timing affect exact results.</p>
+      <div class="cols">
+        <div><h3>Claims versus cash</h3><p>Accrual moves no tokens. Supplier interest is a claim on future borrower repayments. Borrowing reduces pool cash; repayment replenishes it. A supplier can hold a valid claim yet be unable to withdraw while the pool lacks base tokens.</p></div>
+        <div><h3>No reserve or loss mechanism</h3><p>The formula allocates accounted borrower interest to suppliers with no reserve fee. Collateral earns no interest here. There is no explicit reserve balance, bad-debt write-off or supplier loss-allocation path.</p></div>
+      </div>
+      <p><code>utilization = floor(total debt × F / total supply claims)</code>, or zero if supply claims are zero. It is not capped at 100%. The borrow index advances even when debt is zero; the supply index advances only when supply claims are positive.</p>
+      <span class="source"><a href="#src-interest">LendingMarket.sol:123–150</a>; <a href="#src-views">286–308</a>; <a href="#src-rounding">332–340</a></span>
+    </section>
+
+    <section id="liquidation">
+      <h2>Borrowing power and liquidation</h2>
+      <div class="formula">Collateral value = floor(collateral balance × oracle price / F)
+Borrowing power = floor(collateral value × collateral factor / F)
+Healthy = borrowing power ≥ stored-index debt</div>
+      <p>Ten WETH at 2,000 base each, with an 80% factor, gives 16,000 base of borrowing power. Borrowing 15,000 leaves a 1,000-base margin. At a price of 1,800, borrowing power falls to 14,400, making the same debt liquidatable. Equality is healthy. Debt-free accounts return healthy without an oracle query.</p>
+      <p>The same collateral factor controls borrowing eligibility and liquidation eligibility; there is no separate liquidation threshold. Anyone can liquidate an unhealthy borrower. There is no close factor limiting a repayment fraction and no requirement that the remaining position become healthy.</p>
+      <div class="critical">
+        <h3>The implemented seizure omits the price</h3>
+        <p>The code computes <code>seized = min(collateral balance, floor(repaid base × incentive / F))</code>. It does not convert the base value to collateral using the oracle price.</p>
+        <p>In the existing liquidation test, 1,000 bUSD repaid at a 110% incentive calculates 1,100 WETH before the cap, so <strong>all 10 WETH are seized</strong>. A price-based conversion at 1,800 bUSD/WETH would produce approximately 0.6111 WETH. That comparison describes the economic formula implied by the documentation; it is not the formula executed by this contract.</p>
+        <p>At the test’s unchanged indices, this leaves 14,000 bUSD of debt and zero collateral. The cap does not lower repayment, and the code has no mechanism to resolve the remaining unsecured debt.</p>
+      </div>
+      <div class="calc" aria-labelledby="calculator-title">
+        <h3 id="calculator-title">Explore the test’s liquidation scenario</h3>
+        <p class="small muted">Fixed inputs: 10 WETH, 15,000 bUSD debt, 80% factor, 110% incentive and 1,000 bUSD repayment. Move the price to see eligibility and seizure.</p>
+        <div class="calc-grid">
+          <div>
+            <label for="price">WETH price <span>bUSD per WETH</span></label>
+            <output id="price-output" for="price" class="price-reading">1,800</output>
+            <input type="range" id="price" min="500" max="2500" step="25" value="1800" aria-describedby="scenario-note">
+            <button type="button" data-price="2000">Initial price: 2,000</button><button type="button" data-price="1800">Test price: 1,800</button>
+            <div class="bar-label">Borrowing power</div><div class="bar"><div id="power-bar" style="width:72%"></div></div>
+            <div class="bar-label">Debt: 15,000 bUSD</div><div class="bar debt"><div style="width:75%"></div></div>
+          </div>
+          <div aria-live="polite" aria-atomic="true">
+            <div class="metric"><span>Borrowing power</span><strong id="power-output">14,400 bUSD</strong></div>
+            <div class="metric"><span>Power / debt</span><strong id="ratio-output">0.960</strong></div>
+            <p class="status bad" id="health-output">Unhealthy: liquidation is allowed.</p>
+            <div class="metric"><span>Code’s capped seizure</span><strong id="actual-output">10 WETH</strong></div>
+            <div class="metric"><span>Price-converted comparison</span><strong id="expected-output">0.6111 WETH</strong></div>
+            <div class="metric"><span>Remaining debt / collateral</span><strong id="remaining-output">14,000 bUSD / 0 WETH</strong></div>
+          </div>
+        </div>
+        <p class="small muted" id="scenario-note">Educational calculation using whole-token values and unchanged indices. It excludes Solidity integer rounding, elapsed interest and liquidity/allowance checks. “Power / debt” is a derived display ratio, not a contract function. Price-converted seizure is a comparison, not an available protocol action.</p>
+        <noscript><p class="small">Enable JavaScript to move the price. The values displayed above show the existing test at a price of 1,800.</p></noscript>
+      </div>
+      <span class="source"><a href="#src-liquidation">LendingMarket.sol:255–280</a>; <a href="#src-views">312–325</a>; <a href="#src-liquidation-test">LendingMarket.t.sol:127–143</a></span>
+    </section>
+
+    <section id="critical">
+      <h2>Critical design points</h2>
+      <p>These are source-level observations relevant to understanding the protocol. The eight current tests do not exercise most of these boundaries; this report is an architecture review, not a complete exploit assessment.</p>
+      <div class="finding"><h3>Principal rounding</h3><div><p>Every amount-to-principal conversion rounds down, including borrow and withdrawal. At an index above 1e18, a positive one-raw-unit amount can convert to zero principal: tokens may leave while no claim is debited or debt recorded. Some full-balance repayments can leave residual principal. Direction-specific rounding and minimum-principal handling are important missing boundaries.</p><span class="source"><a href="#src-rounding">LendingMarket.sol:332–340</a>; <a href="#src-user-actions">169–239</a></span></div></div>
+      <div class="finding"><h3>Debt freshness</h3><div><p><code>withdrawCollateral()</code> checks health without first accruing interest. It can therefore approve a withdrawal against debt that excludes elapsed interest. Read-only health and balance calls also use stored indices; callers need to distinguish those values from debt after an accrual.</p><span class="source"><a href="#src-user-actions">LendingMarket.sol:199–206</a>; <a href="#src-views">286–319</a></span></div></div>
+      <div class="finding"><h3>Oracle and units</h3><div><p>The market reads only the price answer and casts it to <code>uint256</code>. It checks neither positivity nor freshness nor round completeness. Negative answers become large unsigned values, potentially distorting valuations or causing arithmetic reverts. Token/feed <code>decimals()</code> are not consulted; the shown economics assume 18-decimal assets and a 1e18-scaled price. A raw feed with different scaling is not automatically compatible.</p><span class="source"><a href="#src-views">LendingMarket.sol:323–325</a>; <a href="#src-interfaces">interfaces/IPriceOracle.sol; interfaces/IERC20.sol</a></span></div></div>
+      <div class="finding"><h3>Token integration</h3><div><p>ERC20 transfer return booleans are ignored. A false-returning token can leave accounting updated without payment. Incoming transfer amounts are not verified through balance deltas, so transfer fees also break the assumed accounting. There is no reentrancy guard; token behavior is part of the trust boundary. The included mocks return true and have ordinary transfers.</p><span class="source"><a href="#src-user-actions">LendingMarket.sol:160, 179, 191, 208, 223, 237</a>; <a href="#src-liquidation">276–277</a></span></div></div>
+      <div class="finding"><h3>Liquidity and insolvency</h3><div><p>There is no explicit cash-availability check; outgoing transfers rely on token behavior, and the provided mock reverts when balances are insufficient. There are no supply/borrow caps or explicit minimum positions. Capped collateral seizure can leave unsecured debt, while supplier claims remain recorded without an explicit loss-resolution path.</p><span class="source"><a href="#src-user-actions">LendingMarket.sol:169–226</a>; <a href="#src-liquidation">261–277</a></span></div></div>
+      <div class="finding"><h3>Emergency control</h3><div><p>Pausing blocks supply, withdrawal, collateral deposit/withdrawal, borrowing and liquidation. Repayment and interest accrual remain available. That means a pause also blocks supplier exits, adding collateral to improve health and liquidation of risky accounts. The guardian can unpause and replace the oracle, extending beyond the stop-only role described in the README.</p><span class="source"><a href="#src-admin-setters">LendingMarket.sol:346–370</a>; <a href="#src-user-actions">156–228</a>; <a href="#src-liquidation">255</a></span></div></div>
+    </section>
+
+    <section id="deployment">
+      <h2>Deployment and administrative control</h2>
+      <div class="cols">
+        <div><h3>Staging configuration</h3><div class="table-wrap"><table><tbody><tr><th>Base / collateral</th><td>Mock bUSD / mock WETH; both 18 decimals</td></tr><tr><th>Starting price</th><td>2,000 base per WETH</td></tr><tr><th>Collateral factor</th><td>80%</td></tr><tr><th>Liquidation incentive</th><td>110% of repayment value, as documented</td></tr><tr><th>Borrowing rate</th><td>Approximately 5% annually, expressed per second</td></tr><tr><th>Initial roles</th><td>Market + proxy admin: <code>0xA11CE</code><br>Guardian: <code>0x6DA12D</code></td></tr></tbody></table></div></div>
+        <div><h3>Creation sequence</h3><ol class="steps"><li>Deploy mock base, mock collateral and mock oracle.</li><li>Deploy a <code>LendingMarket</code> implementation.</li><li>Encode the market’s initialization call.</li><li>Deploy the proxy, set its implementation/admin slots and delegatecall initialization atomically.</li><li>Use the proxy address as the market address.</li></ol><p class="small muted">The helper does not seed liquidity or contain a Foundry <code>startBroadcast()</code> section. It shows topology/configuration; the source alone does not establish a live production deployment.</p></div>
+      </div>
+      <h3>Who can change what</h3>
+      <div class="table-wrap"><table><thead><tr><th>Authority</th><th>Allowed operations</th><th>Important boundary</th></tr></thead><tbody><tr><td>Proxy admin</td><td><code>upgradeTo(newImplementation)</code></td><td>Target must contain code. Storage layout compatibility is not checked. No proxy-admin transfer function is provided.</td></tr><tr><td>Market admin</td><td><code>setParameters(cf, incentive, rate)</code>, <code>setAdmin(address)</code>, and all guardian operations</td><td>Parameter updates accrue at the old rate first. Factor ≤100%; incentive ≥100%; no maximum incentive or rate.</td></tr><tr><td>Pause guardian</td><td><code>setPaused(bool)</code>, <code>setOracle(address)</code></td><td>Can pause, unpause and replace pricing. No guardian setter is provided.</td></tr></tbody></table></div>
+      <div class="note"><p><strong>Two different admin records:</strong> <code>setAdmin()</code> changes the market’s admin variable, but leaves the proxy-admin slot unchanged. The former market admin can retain upgrade control after market administration is transferred.</p><p><strong>Proxy behavior:</strong> despite its name and comment, the fallback delegates calls from every sender, including the proxy admin. Explicit proxy functions intercept their own selectors. Native ETH can be received, but has no corresponding lending or withdrawal accounting.</p></div>
+      <p>Initialization is once-only per storage context but performs no address or risk-parameter validation. The staging constructor initializes the proxy atomically. The implementation is not separately initializer-locked. The hardcoded addresses in the helper do not themselves establish the timelock/multisig governance described in the README.</p>
+      <span class="source"><a href="#src-deploy">Deploy.s.sol:17–57</a>; <a href="#src-init">LendingMarket.sol:100–126</a>; <a href="#src-admin-setters">346–376</a>; <a href="#src-proxy">TransparentUpgradeableProxy.sol:21–62</a></span>
+    </section>
+
+    <section id="tests">
+      <h2>Appended: the lending market test contract</h2>
+      <p><code>LendingMarketTest</code> in <code>test/LendingMarket.t.sol</code> is a Foundry integration-style suite. It exercises market calls through the actual proxy with mock tokens and a mock oracle. It contains <strong>eight deterministic tests</strong>, focused mostly on normal user flows plus one borrowing-limit rejection.</p>
+      <div class="test-note"><span class="pill">8 passed · 0 failed · 0 skipped</span><p>Verified in this workspace with <code>forge test</code> on October 14, 2026. A passing result confirms the existing assertions; it does not validate the untested boundaries described above.</p></div>
+      <h3>Where and how it tests</h3>
+      <p><code>setUp()</code> deploys 18-decimal bUSD and WETH mocks, a 2,000-base oracle, the implementation and an initialized proxy. It uses the staging market’s 80% factor, 110% incentive and roughly 5% borrowing rate, then mints and supplies <strong>1,000,000 bUSD</strong> to seed liquidity. Helpers mint/approve borrower collateral; Foundry impersonation selects actors, and <code>vm.warp()</code> advances time for interest testing. This is a local Solidity environment, with no live-chain fork or real token/feed integration.</p>
+      <div class="table-wrap"><table><thead><tr><th>Test</th><th>Area / scenario</th><th>What it actually asserts</th></tr></thead><tbody>
+        <tr><td><code>test_supplyCreditsTheSupplier</code></td><td>Supply accounting after setup’s deposit</td><td>Supplier’s reported balance is approximately 1,000,000 base, within one raw unit.</td></tr>
+        <tr><td><code>test_withdrawReturnsBase</code></td><td>Withdraw 1,000 base</td><td>Supplier receives 1,000 base. Does not assert principal/totals afterward.</td></tr>
+        <tr><td><code>test_borrowAgainstCollateral</code></td><td>Post 10 WETH; borrow 5,000 base</td><td>Borrower receives tokens, debt is approximately 5,000 and position is healthy.</td></tr>
+        <tr><td><code>test_borrowBeyondBorrowingPowerReverts</code></td><td>Post 10 WETH; attempt 17,000 base</td><td>Call reverts with <code>would be undercollateralized</code>, above the 16,000 limit.</td></tr>
+        <tr><td><code>test_repayClearsTheDebt</code></td><td>Borrow and immediately repay 5,000 base</td><td>Reported debt becomes zero. Does not exercise repayment after interest or rounding.</td></tr>
+        <tr><td><code>test_interestAccruesOnOpenDebt</code></td><td>Borrow 10,000; advance one year; accrue</td><td>Debt increases. Does not check exact rate, supplier interest or index math.</td></tr>
+        <tr><td><code>test_underwaterPositionCanBeLiquidated</code></td><td>Borrow 15,000; price falls to 1,800; repay 1,000</td><td>Position is unhealthy; liquidator receives some WETH. Does not check correct seizure or remaining debt/collateral.</td></tr>
+        <tr><td><code>test_guardianCanPause</code></td><td>Guardian calls <code>setPaused(true)</code></td><td>Pause flag becomes true. Does not test blocked actions, unpausing or repayment during pause.</td></tr>
+      </tbody></table></div>
+      <h3>Main areas outside current coverage</h3>
+      <ul>
+        <li><strong>Accounting boundaries:</strong> exact borrower/supplier interest, multiple accrual intervals, tiny principal conversions, full repayment after interest and aggregate accounting consistency.</li>
+        <li><strong>Collateral and liquidation:</strong> collateral withdrawal with accrued debt, expected price-based seizure, seizure caps and residual unsecured debt.</li>
+        <li><strong>External dependencies:</strong> stale/zero/negative oracle answers, feed/token decimals, insufficient cash, false-returning or fee-charging tokens and reentrancy behavior.</li>
+        <li><strong>Roles and lifecycle:</strong> unauthorized calls, guardian oracle/unpause powers, pause enforcement, admin transfer, initialization validation/reinitialization and state preservation across upgrades.</li>
+      </ul>
+      <p class="small muted"><code>foundry.toml</code> configures 256 fuzz runs and invariant runs of 64 with depth 32. This suite has no parameterized fuzz tests or invariant functions, so those settings do not add those forms of coverage. In particular, the liquidation test’s “received &gt; 0” assertion allows the excessive seizure described above to pass.</p>
+      <span class="source"><a href="#src-test-setup">LendingMarket.t.sol:33–67</a>; <a href="#src-tests">72–150</a>; <a href="#src-config">foundry.toml</a></span>
+    </section>
+
+    <section id="sources" class="sources">
+      <h2>Source references</h2>
+      <p class="small muted">The excerpts below are embedded so this HTML remains useful when shared alone. Line numbers refer to the reviewed workspace snapshot. Expand a reference to inspect the code behind a claim.</p>
+      <details id="src-state"><summary>Account and market state <span class="source">src/LendingMarket.sol:30–60</span></summary><pre><code> 30      // --- roles and wiring ---
+ 31      address public admin;
+ 32      address public pauseGuardian;
+ 33      IPriceOracle public oracle;
+ 34      IERC20 public baseToken;
+ 35      IERC20 public collateralToken;
+ 36
+ 37      // --- accrual state ---
+ 38      uint256 public baseBorrowIndex;
+ 39      uint256 public baseSupplyIndex;
+ 40      uint256 public lastAccrualTime;
+ 41
+ 42      // --- market totals (principal terms) ---
+ 43      uint256 public totalSupplyPrincipal;
+ 44      uint256 public totalBorrowPrincipal;
+ 45      uint256 public totalCollateral;
+ 46
+ 47      // --- risk parameters ---
+ 48      uint256 public collateralFactor;
+ 49      uint256 public liquidationIncentive;
+ 50      uint256 public borrowRatePerSecond;
+ 51
+ 52      // --- per-account state ---
+ 53      mapping(address =&gt; uint256) public supplyPrincipal;
+ 54      mapping(address =&gt; uint256) public borrowPrincipal;
+ 55      mapping(address =&gt; uint256) public collateralBalance;
+ 56
+ 57      // --- circuit breaker ---
+ 58      bool public paused;
+ 59
+ 60      bool private _initialized;</code></pre></details>
+<details id="src-init"><summary>Initialization <span class="source">src/LendingMarket.sol:100–126</span></summary><pre><code>100      function initialize(
+101          address admin_,
+102          address pauseGuardian_,
+103          address oracle_,
+104          address baseToken_,
+105          address collateralToken_,
+106          uint256 collateralFactor_,
+107          uint256 liquidationIncentive_,
+108          uint256 borrowRatePerSecond_
+109      ) external {
+110          require(!_initialized, &quot;already initialized&quot;);
+111          _initialized = true;
+112
+113          admin = admin_;
+114          pauseGuardian = pauseGuardian_;
+115          oracle = IPriceOracle(oracle_);
+116          baseToken = IERC20(baseToken_);
+117          collateralToken = IERC20(collateralToken_);
+118
+119          collateralFactor = collateralFactor_;
+120          liquidationIncentive = liquidationIncentive_;
+121          borrowRatePerSecond = borrowRatePerSecond_;
+122
+123          baseBorrowIndex = FACTOR;
+124          baseSupplyIndex = FACTOR;
+125          lastAccrualTime = block.timestamp;
+126      }</code></pre></details>
+<details id="src-interest"><summary>Interest accrual <span class="source">src/LendingMarket.sol:133–150</span></summary><pre><code>133      function accrueInterest() public {
+134          uint256 elapsed = block.timestamp - lastAccrualTime;
+135          if (elapsed == 0) return;
+136
+137          uint256 interest = borrowRatePerSecond * elapsed;
+138
+139          uint256 borrowsBefore = presentValueBorrow(totalBorrowPrincipal);
+140          uint256 suppliesBefore = presentValueSupply(totalSupplyPrincipal);
+141
+142          baseBorrowIndex += (baseBorrowIndex * interest) / FACTOR;
+143
+144          if (suppliesBefore &gt; 0) {
+145              uint256 accruedToSuppliers = (borrowsBefore * interest) / FACTOR;
+146              baseSupplyIndex += (baseSupplyIndex * accruedToSuppliers) / suppliesBefore;
+147          }
+148
+149          lastAccrualTime = block.timestamp;
+150      }</code></pre></details>
+<details id="src-user-actions"><summary>Supplier and borrower actions <span class="source">src/LendingMarket.sol:156–243</span></summary><pre><code>156      function supply(uint256 amount) external whenNotPaused {
+157          require(amount &gt; 0, &quot;zero amount&quot;);
+158          accrueInterest();
+159
+160          baseToken.transferFrom(msg.sender, address(this), amount);
+161
+162          uint256 principal = _principalForSupply(amount);
+163          supplyPrincipal[msg.sender] += principal;
+164          totalSupplyPrincipal += principal;
+165
+166          emit Supply(msg.sender, amount);
+167      }
+168
+169      function withdraw(uint256 amount) external whenNotPaused {
+170          require(amount &gt; 0, &quot;zero amount&quot;);
+171          accrueInterest();
+172
+173          uint256 principal = _principalForSupply(amount); // TODO: investigate rounding error here / _principalForSupply _principalForBorrow
+174          require(supplyPrincipal[msg.sender] &gt;= principal, &quot;insufficient balance&quot;);
+175
+176          supplyPrincipal[msg.sender] -= principal;
+177          totalSupplyPrincipal -= principal;
+178
+179          baseToken.transfer(msg.sender, amount);
+180
+181          emit Withdraw(msg.sender, amount);
+182      }
+183
+184      // -------------------------------------------------------------------------------------------
+185      // Borrower actions
+186      // -------------------------------------------------------------------------------------------
+187
+188      function supplyCollateral(uint256 amount) external whenNotPaused {
+189          require(amount &gt; 0, &quot;zero amount&quot;);
+190
+191          collateralToken.transferFrom(msg.sender, address(this), amount);
+192
+193          collateralBalance[msg.sender] += amount;
+194          totalCollateral += amount;
+195
+196          emit SupplyCollateral(msg.sender, amount);
+197      }
+198
+199      function withdrawCollateral(uint256 amount) external whenNotPaused {
+200          require(amount &gt; 0, &quot;zero amount&quot;);
+201          require(collateralBalance[msg.sender] &gt;= amount, &quot;insufficient collateral&quot;);
+202
+203          collateralBalance[msg.sender] -= amount;
+204          totalCollateral -= amount;
+205
+206          require(isHealthy(msg.sender), &quot;would be undercollateralized&quot;);
+207
+208          collateralToken.transfer(msg.sender, amount);
+209
+210          emit WithdrawCollateral(msg.sender, amount);
+211      }
+212
+213      function borrow(uint256 amount) external whenNotPaused {
+214          require(amount &gt; 0, &quot;zero amount&quot;);
+215          accrueInterest();
+216
+217          uint256 principal = _principalForBorrow(amount);
+218          borrowPrincipal[msg.sender] += principal;
+219          totalBorrowPrincipal += principal;
+220
+221          require(isHealthy(msg.sender), &quot;would be undercollateralized&quot;);
+222
+223          baseToken.transfer(msg.sender, amount);
+224
+225          emit Borrow(msg.sender, amount);
+226      }
+227
+228      function repay(uint256 amount) external {
+229          require(amount &gt; 0, &quot;zero amount&quot;);
+230          accrueInterest();
+231
+232          uint256 owed = borrowBalanceOf(msg.sender);
+233          if (amount &gt; owed) amount = owed;
+234
+235          uint256 principal = _principalForBorrow(amount);
+236
+237          baseToken.transferFrom(msg.sender, address(this), amount);
+238
+239          borrowPrincipal[msg.sender] -= principal;
+240          totalBorrowPrincipal -= principal;
+241
+242          emit Repay(msg.sender, amount);
+243      }</code></pre></details>
+<details id="src-liquidation"><summary>Liquidation <span class="source">src/LendingMarket.sol:255–280</span></summary><pre><code>255      function liquidate(address borrower, uint256 repayAmount) external whenNotPaused {
+256          require(repayAmount &gt; 0, &quot;zero amount&quot;);
+257          accrueInterest();
+258
+259          require(!isHealthy(borrower), &quot;borrower is healthy&quot;);
+260
+261          uint256 owed = borrowBalanceOf(borrower);
+262          if (repayAmount &gt; owed) repayAmount = owed;
+263
+264          uint256 seizeAmount = (repayAmount * liquidationIncentive) / FACTOR;
+265          if (seizeAmount &gt; collateralBalance[borrower]) {
+266              seizeAmount = collateralBalance[borrower];
+267          }
+268
+269          uint256 principal = _principalForBorrow(repayAmount);
+270          borrowPrincipal[borrower] -= principal;
+271          totalBorrowPrincipal -= principal;
+272
+273          collateralBalance[borrower] -= seizeAmount;
+274          totalCollateral -= seizeAmount;
+275
+276          baseToken.transferFrom(msg.sender, address(this), repayAmount);
+277          collateralToken.transfer(msg.sender, seizeAmount);
+278
+279          emit Liquidate(msg.sender, borrower, repayAmount, seizeAmount);
+280      }</code></pre></details>
+<details id="src-views"><summary>Balance, utilization, health and price views <span class="source">src/LendingMarket.sol:286–325</span></summary><pre><code>286      function borrowBalanceOf(address account) public view returns (uint256) {
+287          return presentValueBorrow(borrowPrincipal[account]);
+288      }
+289
+290      function supplyBalanceOf(address account) public view returns (uint256) {
+291          return presentValueSupply(supplyPrincipal[account]);
+292      }
+293
+294      function presentValueBorrow(uint256 principal) public view returns (uint256) {
+295          return (principal * baseBorrowIndex) / FACTOR;
+296      }
+297
+298      function presentValueSupply(uint256 principal) public view returns (uint256) {
+299          return (principal * baseSupplyIndex) / FACTOR;
+300      }
+301
+302      /// @notice Fraction of supplied base currently borrowed, 1e18 scaled.
+303      /// @dev Multiplication is applied before the division so the 1e18 scale survives; the
+304      ///      intermediate cannot realistically overflow at supported market sizes.
+305      function utilization() public view returns (uint256) {
+306          uint256 supplied = presentValueSupply(totalSupplyPrincipal);
+307          if (supplied == 0) return 0;
+308          return (presentValueBorrow(totalBorrowPrincipal) * FACTOR) / supplied;
+309      }
+310
+311      /// @notice True when the account&#x27;s borrowing power covers its debt.
+312      function isHealthy(address account) public view returns (bool) {
+313          uint256 debt = borrowBalanceOf(account);
+314          if (debt == 0) return true;
+315
+316          uint256 collateralValue = (collateralBalance[account] * getPrice()) / FACTOR;
+317          uint256 borrowingPower = (collateralValue * collateralFactor) / FACTOR;
+318
+319          return borrowingPower &gt;= debt;
+320      }
+321
+322      /// @notice Collateral price in base-asset terms, 1e18 scaled.
+323      function getPrice() public view returns (uint256) {
+324          (, int256 answer,,,) = oracle.latestRoundData();
+325          return uint256(answer);</code></pre></details>
+<details id="src-rounding"><summary>Principal conversions <span class="source">src/LendingMarket.sol:332–340</span></summary><pre><code>332
+333      // both of these round down.
+334      function _principalForBorrow(uint256 amount) internal view returns (uint256) {
+335          return (amount * FACTOR) / baseBorrowIndex;
+336      }
+337
+338      // both of these round down.
+339      function _principalForSupply(uint256 amount) internal view returns (uint256) {
+340          return (amount * FACTOR) / baseSupplyIndex;</code></pre></details>
+<details id="src-admin"><summary>Market administration <span class="source">src/LendingMarket.sol:81–88</span></summary><pre><code> 81      modifier onlyAdmin() {
+ 82          require(msg.sender == admin, &quot;not admin&quot;);
+ 83          _;
+ 84      }
+ 85
+ 86      modifier onlyGuardian() {
+ 87          require(msg.sender == pauseGuardian || msg.sender == admin, &quot;not guardian&quot;);
+ 88          _;</code></pre></details>
+<details id="src-admin-setters"><summary>Market administration setters <span class="source">src/LendingMarket.sol:346–376</span></summary><pre><code>346
+347      function setOracle(address newOracle) external onlyGuardian {
+348          require(newOracle != address(0), &quot;zero oracle&quot;);
+349          oracle = IPriceOracle(newOracle);
+350          emit OracleUpdated(newOracle);
+351      }
+352
+353      function setParameters(uint256 collateralFactor_, uint256 liquidationIncentive_, uint256 borrowRatePerSecond_)
+354          external
+355          onlyAdmin
+356      {
+357          require(collateralFactor_ &lt;= FACTOR, &quot;cf too high&quot;);
+358          require(liquidationIncentive_ &gt;= FACTOR, &quot;incentive below par&quot;);
+359
+360          accrueInterest();
+361
+362          collateralFactor = collateralFactor_;
+363          liquidationIncentive = liquidationIncentive_;
+364          borrowRatePerSecond = borrowRatePerSecond_;
+365
+366          emit ParametersUpdated(collateralFactor_, liquidationIncentive_, borrowRatePerSecond_);
+367      }
+368
+369      function setPaused(bool paused_) external onlyGuardian {
+370          paused = paused_;
+371          emit PausedSet(paused_);
+372      }
+373
+374      function setAdmin(address newAdmin) external onlyAdmin {
+375          require(newAdmin != address(0), &quot;zero admin&quot;);
+376          admin = newAdmin;</code></pre></details>
+<details id="src-proxy"><summary>Proxy storage, initialization, upgrades and delegation <span class="source">src/TransparentUpgradeableProxy.sol:12–62</span></summary><pre><code> 12      /// @dev bytes32(uint256(keccak256(&quot;eip1967.proxy.implementation&quot;)) - 1)
+ 13      bytes32 internal constant _IMPLEMENTATION_SLOT =
+ 14          0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
+ 15
+ 16      /// @dev bytes32(uint256(keccak256(&quot;eip1967.proxy.admin&quot;)) - 1)
+ 17      bytes32 internal constant _ADMIN_SLOT = 0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103;
+ 18
+ 19      event Upgraded(address indexed implementation);
+ 20
+ 21      constructor(address implementation_, address proxyAdmin_, bytes memory initData) {
+ 22          _setSlot(_IMPLEMENTATION_SLOT, implementation_);
+ 23          _setSlot(_ADMIN_SLOT, proxyAdmin_);
+ 24
+ 25          if (initData.length &gt; 0) {
+ 26              (bool ok, bytes memory ret) = implementation_.delegatecall(initData);
+ 27              require(ok, _revertReason(ret));
+ 28          }
+ 29
+ 30          emit Upgraded(implementation_);
+ 31      }
+ 32
+ 33      function implementation() external view returns (address) {
+ 34          return _getSlot(_IMPLEMENTATION_SLOT);
+ 35      }
+ 36
+ 37      function proxyAdmin() external view returns (address) {
+ 38          return _getSlot(_ADMIN_SLOT);
+ 39      }
+ 40
+ 41      /// @notice Points the proxy at a new implementation. Storage is untouched, so the new
+ 42      ///         implementation must declare a compatible layout.
+ 43      function upgradeTo(address newImplementation) external {
+ 44          require(msg.sender == _getSlot(_ADMIN_SLOT), &quot;not proxy admin&quot;);
+ 45          require(newImplementation.code.length &gt; 0, &quot;not a contract&quot;);
+ 46          _setSlot(_IMPLEMENTATION_SLOT, newImplementation);
+ 47          emit Upgraded(newImplementation);
+ 48      }
+ 49
+ 50      fallback() external payable {
+ 51          address impl = _getSlot(_IMPLEMENTATION_SLOT);
+ 52          assembly {
+ 53              calldatacopy(0, 0, calldatasize())
+ 54              let result := delegatecall(gas(), impl, 0, calldatasize(), 0, 0)
+ 55              returndatacopy(0, 0, returndatasize())
+ 56              switch result
+ 57              case 0 { revert(0, returndatasize()) }
+ 58              default { return(0, returndatasize()) }
+ 59          }
+ 60      }
+ 61
+ 62      receive() external payable {}</code></pre></details>
+<details id="src-deploy"><summary>Staging deployment <span class="source">script/Deploy.s.sol:17–57</span></summary><pre><code> 17      address public admin = address(0xA11CE);
+ 18      address public pauseGuardian = address(0x6DA12D);
+ 19
+ 20      LendingMarket public wethMarket;
+ 21
+ 22      MockERC20 public base;
+ 23      MockERC20 public weth;
+ 24      MockOracle public wethOracle;
+ 25
+ 26      function run() external {
+ 27          base = new MockERC20(&quot;Base USD&quot;, &quot;bUSD&quot;, 18);
+ 28          weth = new MockERC20(&quot;Wrapped Ether&quot;, &quot;WETH&quot;, 18);
+ 29          wethOracle = new MockOracle(2_000e18);
+ 30
+ 31          wethMarket = _deployMarket(address(weth), address(wethOracle), 0.80e18, 1.10e18);
+ 32      }
+ 33
+ 34      function _deployMarket(address collateral, address oracle, uint256 collateralFactor, uint256 incentive)
+ 35          internal
+ 36          returns (LendingMarket)
+ 37      {
+ 38          LendingMarket impl = new LendingMarket();
+ 39
+ 40          bytes memory initData = abi.encodeCall(
+ 41              LendingMarket.initialize,
+ 42              (
+ 43                  admin,
+ 44                  pauseGuardian,
+ 45                  oracle,
+ 46                  address(base),
+ 47                  collateral,
+ 48                  collateralFactor,
+ 49                  incentive,
+ 50                  // ~5% APR expressed per second
+ 51                  uint256(0.05e18) / 365 days
+ 52              )
+ 53          );
+ 54
+ 55          TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(address(impl), admin, initData);
+ 56
+ 57          return LendingMarket(address(proxy));</code></pre></details>
+<details id="src-interfaces"><summary>External interfaces <span class="source">src/interfaces/IPriceOracle.sol:1–17</span></summary><pre><code>  1  // SPDX-License-Identifier: MIT
+  2  pragma solidity 0.8.24;
+  3
+  4  /// @notice Chainlink-style aggregator interface used by the market for collateral pricing.
+  5  interface IPriceOracle {
+  6      /// @return roundId          the round the answer was computed in
+  7      /// @return answer           collateral price denominated in the base asset, 1e18 scaled
+  8      /// @return startedAt        round start timestamp
+  9      /// @return updatedAt        timestamp the answer was last written
+ 10      /// @return answeredInRound  the round the answer was carried over from
+ 11      function latestRoundData()
+ 12          external
+ 13          view
+ 14          returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);
+ 15
+ 16      function decimals() external view returns (uint8);
+ 17  }</code></pre></details>
+<details id="src-erc20"><summary>ERC20 interface <span class="source">src/interfaces/IERC20.sol:1–12</span></summary><pre><code>  1  // SPDX-License-Identifier: MIT
+  2  pragma solidity 0.8.24;
+  3
+  4  interface IERC20 {
+  5      function totalSupply() external view returns (uint256);
+  6      function balanceOf(address account) external view returns (uint256);
+  7      function transfer(address to, uint256 amount) external returns (bool);
+  8      function allowance(address owner, address spender) external view returns (uint256);
+  9      function approve(address spender, uint256 amount) external returns (bool);
+ 10      function transferFrom(address from, address to, uint256 amount) external returns (bool);
+ 11      function decimals() external view returns (uint8);
+ 12  }</code></pre></details>
+<details id="src-test-setup"><summary>Test fixture and collateral helper <span class="source">test/LendingMarket.t.sol:33–67</span></summary><pre><code> 33      function setUp() public {
+ 34          base = new MockERC20(&quot;Base USD&quot;, &quot;bUSD&quot;, 18);
+ 35          weth = new MockERC20(&quot;Wrapped Ether&quot;, &quot;WETH&quot;, 18);
+ 36          wethOracle = new MockOracle(2_000e18);
+ 37
+ 38          LendingMarket impl = new LendingMarket();
+ 39          bytes memory initData = abi.encodeCall(
+ 40              LendingMarket.initialize,
+ 41              (
+ 42                  admin,
+ 43                  guardian,
+ 44                  address(wethOracle),
+ 45                  address(base),
+ 46                  address(weth),
+ 47                  0.80e18,
+ 48                  1.10e18,
+ 49                  RATE_PER_SECOND
+ 50              )
+ 51          );
+ 52          market = LendingMarket(address(new TransparentUpgradeableProxy(address(impl), admin, initData)));
+ 53
+ 54          // Seed the market with base liquidity for borrowers to draw against.
+ 55          base.mint(supplier, 1_000_000e18);
+ 56          vm.startPrank(supplier);
+ 57          base.approve(address(market), type(uint256).max);
+ 58          market.supply(1_000_000e18);
+ 59          vm.stopPrank();
+ 60      }
+ 61
+ 62      function _postCollateral(address who, uint256 amount) internal {
+ 63          weth.mint(who, amount);
+ 64          vm.startPrank(who);
+ 65          weth.approve(address(market), type(uint256).max);
+ 66          market.supplyCollateral(amount);
+ 67          vm.stopPrank();</code></pre></details>
+<details id="src-tests"><summary>Eight tests <span class="source">test/LendingMarket.t.sol:72–150</span></summary><pre><code> 72      function test_supplyCreditsTheSupplier() public {
+ 73          assertApproxEqAbs(market.supplyBalanceOf(supplier), 1_000_000e18, 1);
+ 74      }
+ 75
+ 76      function test_withdrawReturnsBase() public {
+ 77          vm.prank(supplier);
+ 78          market.withdraw(1_000e18);
+ 79
+ 80          assertEq(base.balanceOf(supplier), 1_000e18);
+ 81      }
+ 82
+ 83      function test_borrowAgainstCollateral() public {
+ 84          _postCollateral(borrower, 10e18); // 20,000 of collateral, 16,000 of borrowing power
+ 85
+ 86          vm.prank(borrower);
+ 87          market.borrow(5_000e18);
+ 88
+ 89          assertEq(base.balanceOf(borrower), 5_000e18);
+ 90          assertApproxEqAbs(market.borrowBalanceOf(borrower), 5_000e18, 1);
+ 91          assertTrue(market.isHealthy(borrower));
+ 92      }
+ 93
+ 94      function test_borrowBeyondBorrowingPowerReverts() public {
+ 95          _postCollateral(borrower, 10e18);
+ 96
+ 97          vm.prank(borrower);
+ 98          vm.expectRevert(&quot;would be undercollateralized&quot;);
+ 99          market.borrow(17_000e18);
+100      }
+101
+102      function test_repayClearsTheDebt() public {
+103          _postCollateral(borrower, 10e18);
+104
+105          vm.startPrank(borrower);
+106          market.borrow(5_000e18);
+107          base.approve(address(market), type(uint256).max);
+108          market.repay(5_000e18);
+109          vm.stopPrank();
+110
+111          assertEq(market.borrowBalanceOf(borrower), 0);
+112      }
+113
+114      function test_interestAccruesOnOpenDebt() public {
+115          _postCollateral(borrower, 10e18);
+116
+117          vm.prank(borrower);
+118          market.borrow(10_000e18);
+119
+120          vm.warp(block.timestamp + 365 days);
+121          wethOracle.setPrice(2_000e18);
+122          market.accrueInterest();
+123
+124          assertGt(market.borrowBalanceOf(borrower), 10_000e18);
+125      }
+126
+127      function test_underwaterPositionCanBeLiquidated() public {
+128          _postCollateral(borrower, 10e18);
+129
+130          vm.prank(borrower);
+131          market.borrow(15_000e18);
+132
+133          wethOracle.setPrice(1_800e18); // borrowing power falls to 14,400
+134          assertFalse(market.isHealthy(borrower));
+135
+136          base.mint(liquidator, 1_000e18);
+137          vm.startPrank(liquidator);
+138          base.approve(address(market), type(uint256).max);
+139          market.liquidate(borrower, 1_000e18);
+140          vm.stopPrank();
+141
+142          assertGt(weth.balanceOf(liquidator), 0);
+143      }
+144
+145      function test_guardianCanPause() public {
+146          vm.prank(guardian);
+147          market.setPaused(true);
+148
+149          assertTrue(market.paused());
+150      }</code></pre></details>
+<details id="src-liquidation-test"><summary>Liquidation test <span class="source">test/LendingMarket.t.sol:127–143</span></summary><pre><code>127      function test_underwaterPositionCanBeLiquidated() public {
+128          _postCollateral(borrower, 10e18);
+129
+130          vm.prank(borrower);
+131          market.borrow(15_000e18);
+132
+133          wethOracle.setPrice(1_800e18); // borrowing power falls to 14,400
+134          assertFalse(market.isHealthy(borrower));
+135
+136          base.mint(liquidator, 1_000e18);
+137          vm.startPrank(liquidator);
+138          base.approve(address(market), type(uint256).max);
+139          market.liquidate(borrower, 1_000e18);
+140          vm.stopPrank();
+141
+142          assertGt(weth.balanceOf(liquidator), 0);
+143      }</code></pre></details>
+<details id="src-config"><summary>Foundry configuration <span class="source">foundry.toml:1–14</span></summary><pre><code>  1  [profile.default]
+  2  src = &quot;src&quot;
+  3  out = &quot;out&quot;
+  4  libs = [&quot;lib&quot;]
+  5  test = &quot;test&quot;
+  6  solc = &quot;0.8.24&quot;
+  7  optimizer = true
+  8  optimizer_runs = 200
+  9  fuzz = { runs = 256 }
+ 10  invariant = { runs = 64, depth = 32 }
+ 11
+ 12  [fmt]
+ 13  line_length = 110
+ 14  tab_width = 4</code></pre></details>
+    </section>
+    <footer class="footer">Prepared from the local LendingMarket project. Only this report was authored for the architecture overview; protocol source was not changed. All visuals, styles and interactive logic are included in this file; no network connection is required.</footer>
+  </main>
+</div>
+<script>
+  (() => {
+    const priceInput = document.getElementById('price');
+    const format = (value, digits = 0) => value.toLocaleString('en-US', {minimumFractionDigits: digits, maximumFractionDigits: digits});
+    const update = () => {
+      const price = Number(priceInput.value);
+      const power = 10 * price * 0.8;
+      const unhealthy = power < 15000;
+      document.getElementById('price-output').textContent = format(price);
+      document.getElementById('power-output').textContent = format(power) + ' bUSD';
+      document.getElementById('ratio-output').textContent = format(power / 15000, 3);
+      document.getElementById('power-bar').style.width = (power / 20000 * 100) + '%';
+      const status = document.getElementById('health-output');
+      status.textContent = unhealthy ? 'Unhealthy: liquidation is allowed.' : 'Healthy: liquidation reverts.';
+      status.classList.toggle('bad', unhealthy);
+      document.getElementById('actual-output').textContent = unhealthy ? '10 WETH' : 'No seizure';
+      document.getElementById('expected-output').textContent = unhealthy ? format(1000 * 1.1 / price, 4) + ' WETH' : 'Not applicable';
+      document.getElementById('remaining-output').textContent = unhealthy ? '14,000 bUSD / 0 WETH' : '15,000 bUSD / 10 WETH';
+    };
+    priceInput.addEventListener('input', update);
+    document.querySelectorAll('[data-price]').forEach(button => button.addEventListener('click', () => {priceInput.value = button.dataset.price; update();}));
+    document.getElementById('print-report').addEventListener('click', () => window.print());
+    update();
+  })();
+</script>
+</body>
+</html>
