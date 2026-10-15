@@ -98,6 +98,12 @@ contract LendingMarket {
         _;
     }
 
+    modifier onlyAdminIfUnpausing(bool paused_) {
+        // Reject a guardian's attempt to resume risk-taking before interest accounting runs.
+        require(paused_ || msg.sender == admin, "not admin");
+        _;
+    }
+
     modifier whenNotPaused() {
         require(!paused, "paused");
         _;
@@ -417,9 +423,8 @@ contract LendingMarket {
         emit ParametersUpdated(collateralFactor_, liquidationIncentive_, borrowRatePerSecond_);
     }
 
-    function setPaused(bool paused_) external onlyGuardian accruesInterest {
-        // The guardian may stop risk-taking; only admin may resume it after an incident.
-        require(paused_ || msg.sender == admin, "not admin");
+    // The guardian may stop risk-taking; only admin may resume it after an incident.
+    function setPaused(bool paused_) external onlyGuardian onlyAdminIfUnpausing(paused_) accruesInterest {
         paused = paused_;
         emit PausedSet(paused_);
     }

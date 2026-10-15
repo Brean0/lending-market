@@ -257,7 +257,7 @@ contract InterestAccrualModifierTest is LendingMarketTest {
         }
         vm.expectRevert("paused");
         market.liquidate(borrower, 1e18);
-        vm.expectRevert("not guardian");
+        vm.expectRevert("not admin");
         market.setOracle(address(wethOracle));
         vm.expectRevert("not guardian");
         market.setPaused(false);
@@ -279,7 +279,13 @@ contract InterestAccrualModifierTest is LendingMarketTest {
         market.supplyCollateral(1e18);
         vm.expectRevert("not guardian");
         market.setPaused(false);
-        vm.expectRevert("not guardian");
+        vm.prank(guardian);
+        vm.expectRevert("not admin");
+        market.setPaused(false);
+        vm.prank(guardian);
+        vm.expectRevert("not admin");
+        market.setOracle(address(wethOracle));
+        vm.expectRevert("not admin");
         market.setOracle(address(wethOracle));
         vm.expectRevert("not admin");
         market.setAdmin(supplier);
