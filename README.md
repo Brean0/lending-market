@@ -56,3 +56,23 @@ The split matters. The guardian key is warmer and held by more people than the a
 ## Listed markets
 
 See `script/Deploy.s.sol` for the current staging configuration.
+
+## Scope
+
+**What I prioritized and deliberately left out**
+
+I prioritized protocol solvency, focusing on liquidation accounting errors and validation of stale or invalid oracle data. I deferred position transfers and broader oracle manipulation resistance changes to maintain audit scope.
+
+**Where I was unsure and what I would verify with more time**
+
+Uncertainty remained around oracle resistance versus freshness tradeoffs and the quality of generated tests. Further work would include team review, manual test inspection, and CI verification of correctness, coverage, and runtime.
+
+**AI tooling and a suggestion I evaluated**
+
+I used Codex for review, fixes, and tests. I rejected a separate withdrawal interest-accrual PR because another PR already covered the change.
+
+## Recording and transcripts
+
+- [Interview recording](https://youtu.be/wbi-kMxV9PY) — a recording of the interview, including my approach, reasoning, and thought process throughout.
+- [Implementation transcript](https://notes.granola.ai/t/0f18bc86-fec9-43b0-8442-b5a5f51023d7-00b881l8) — Granola notes from the implementation process.
+- [Conclusion, summary, and self-reflection](https://notes.granola.ai/t/3dfb0fe7-8245-474a-ac46-8838974a36ef-00b881l8) — Granola notes capturing my conclusions and reflections.
