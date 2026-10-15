@@ -98,7 +98,8 @@ contract TokenTransfersTest is Test {
                 address(collateral),
                 0.8e18,
                 1.1e18,
-                uint256(0.05e18) / 365 days
+                uint256(0.05e18) / 365 days,
+                1 hours
             )
         );
         market = LendingMarket(
