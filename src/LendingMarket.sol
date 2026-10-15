@@ -31,7 +31,6 @@ contract LendingMarket {
 
     // --- roles and wiring ---
     address public admin;
-    address public pendingAdmin;
     address public pauseGuardian;
     IPriceOracle public oracle;
     IERC20 public baseToken;
@@ -64,6 +63,7 @@ contract LendingMarket {
 
     // Appended for proxy compatibility; configure to match the listed feed's heartbeat.
     uint256 public maxPriceAge;
+    address public pendingAdmin;
 
     // -------------------------------------------------------------------------------------------
     // Events
