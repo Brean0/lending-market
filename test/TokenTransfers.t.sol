@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.24;
 
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Test} from "forge-std/Test.sol";
 import {LendingMarket} from "../src/LendingMarket.sol";
 import {TransparentUpgradeableProxy} from "../src/TransparentUpgradeableProxy.sol";
@@ -15,6 +16,7 @@ contract TransferTestToken {
         FalseAfterMove,
         ShortReturn,
         LongReturn,
+        LongFalseReturn,
         InvalidBool,
         RecipientFee,
         SenderFee,
@@ -57,18 +59,31 @@ contract TransferTestToken {
         balanceOf[to] += amount - (mode == Mode.RecipientFee ? fee : 0);
         if (mode == Mode.FalseAfterMove) return false;
         if (mode == Mode.NoReturn) assembly { return(0, 0) }
-        if (mode == Mode.ShortReturn) assembly {
-            mstore(0, 1)
-            return(31, 1)
+        if (mode == Mode.ShortReturn) {
+            assembly {
+                mstore(0, 1)
+                return(31, 1)
+            }
         }
-        if (mode == Mode.LongReturn) assembly {
-            mstore(0, 1)
-            mstore(32, 0)
-            return(0, 64)
+        if (mode == Mode.LongReturn) {
+            assembly {
+                mstore(0, 1)
+                mstore(32, 0)
+                return(0, 64)
+            }
         }
-        if (mode == Mode.InvalidBool) assembly {
-            mstore(0, 2)
-            return(0, 32)
+        if (mode == Mode.LongFalseReturn) {
+            assembly {
+                mstore(0, 0)
+                mstore(32, 1)
+                return(0, 64)
+            }
+        }
+        if (mode == Mode.InvalidBool) {
+            assembly {
+                mstore(0, 2)
+                return(0, 32)
+            }
         }
         return true;
     }
@@ -199,7 +214,19 @@ contract TokenTransfersTest is Test {
             _prepare(path);
             _token(path).setMode(mode);
             bytes32 beforeState = _state();
-            vm.expectRevert();
+            if (mode == TransferTestToken.Mode.Revert) {
+                // SafeERC20 preserves the token's own reason for failed calls.
+                vm.expectRevert(bytes("token reverted"));
+            } else if (
+                mode == TransferTestToken.Mode.RecipientFee || mode == TransferTestToken.Mode.SenderFee
+                    || mode == TransferTestToken.Mode.NoMovement
+            ) {
+                vm.expectRevert(bytes("inexact transfer"));
+            } else {
+                vm.expectRevert(
+                    abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(_token(path)))
+                );
+            }
             _action(path);
             assertEq(_state(), beforeState, "failed transfer changed accounting, balances or allowances");
             assertTrue(vm.revertToState(snapshot));
@@ -218,8 +245,13 @@ contract TokenTransfersTest is Test {
         _rejectEveryPath(TransferTestToken.Mode.ShortReturn);
     }
 
-    function test_longReturnRollsBackEveryPath() public {
-        _rejectEveryPath(TransferTestToken.Mode.LongReturn);
+    function test_longFalseReturnRollsBackEveryPath() public {
+        _rejectEveryPath(TransferTestToken.Mode.LongFalseReturn);
+    }
+
+    function test_trueWithTrailingDataSucceedsEveryPath() public {
+        // Match standard ABI/SafeERC20 behavior; still assert the complete settlement effects.
+        _acceptEveryPath(TransferTestToken.Mode.LongReturn);
     }
 
     function test_invalidBoolRollsBackEveryPath() public {

@@ -4,7 +4,7 @@ Single-collateral money market. Suppliers deposit the base asset and earn intere
 
 ## Running it
 
-The project is self-contained. `forge-std` is vendored under `lib/`, so no network access or `forge install` is needed.
+The project is self-contained. `forge-std` and the OpenZeppelin dependency subset are vendored under `lib/`, so no network access or `forge install` is needed once Foundry and the pinned Solidity 0.8.24 compiler are available.
 
 ```bash
 forge build
@@ -13,6 +13,10 @@ forge test -vvv --match-test <name>     # a single test, with traces
 ```
 
 Requires Foundry. If you do not have it: `curl -L https://foundry.paradigm.xyz | bash && foundryup`
+
+## Pinned dependencies
+
+OpenZeppelin Contracts **v5.7.0**, commit [`cab19933c33c2ad1d4c7a84864a3601dddfd16f3`](https://github.com/OpenZeppelin/openzeppelin-contracts/tree/cab19933c33c2ad1d4c7a84864a3601dddfd16f3), is vendored unmodified under `lib/openzeppelin-contracts/`. The subset contains the complete import closure of `SafeERC20` and `Math` (for the accounting follow-up), plus the upstream MIT license, provenance, and SHA-256 checksums. Its `^0.8.20` pragmas are compatible with this project's Solidity 0.8.24. Imports use the explicit `@openzeppelin/contracts/` remapping in `foundry.toml`; no submodule or runtime install is required. See [dependency provenance](lib/openzeppelin-contracts/README.vendor.md).
 
 ## Layout
 
@@ -31,6 +35,8 @@ test/
 ## How it works
 
 **Accounting.** Supplier and borrower balances are stored as *principal* and scaled by two global indices, `baseSupplyIndex` and `baseBorrowIndex`. `accrueInterest()` advances both to the current timestamp. Present value is `principal * index / 1e18`, so a balance grows without anyone touching per-account storage.
+
+**Asset settlement.** Supported market assets are 18-decimal, exact-transfer ERC20 contracts. Every token movement uses OpenZeppelin `SafeERC20.safeTransfer` or `safeTransferFrom` directly. SafeERC20 accepts no return data or a canonical `true` first return word (including trailing ABI data), rejects false/invalid returns, and bubbles token reverts. The market separately checks the exact amount received on incoming payments and both the exact reserve debit and recipient credit on outgoing payments. A failed call or mismatch reverts the entire operation, including interest accrual, principal, collateral, allowances, and both liquidation legs. Fee-on-transfer, rebasing, and otherwise inexact assets are unsupported; sender-paid fees on incoming payments are not checked when the market receives the full amount. Decimal compatibility and token trust must be verified before listing: these settlement checks do not make a malicious token's reported balances trustworthy. This change retains the existing storage and public function/event ABI; transfer failures now expose SafeERC20 errors or the token's revert reason instead of the previous generic error.
 
 **Scaling.** Everything is 1e18 fixed point unless stated otherwise. The oracle quotes the collateral in base-asset terms, also 1e18. So with WETH at 2,000 base, `getPrice()` returns `2000e18`.
 
