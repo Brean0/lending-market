@@ -3,6 +3,7 @@ pragma solidity 0.8.24;
 
 import {IERC20} from "./interfaces/IERC20.sol";
 import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
+// TODO: add reentrancy guard
 
 /**
  * @title LendingMarket
@@ -62,6 +63,7 @@ contract LendingMarket {
 
     // Appended for proxy compatibility; configure to match the listed feed's heartbeat.
     uint256 public maxPriceAge;
+    address public pendingAdmin;
 
     // -------------------------------------------------------------------------------------------
     // Events
@@ -77,6 +79,12 @@ contract LendingMarket {
     event OracleUpdated(address indexed newOracle);
     event ParametersUpdated(uint256 collateralFactor, uint256 liquidationIncentive, uint256 borrowRate);
     event PausedSet(bool paused);
+    event PrincipalUpdated(address indexed account, uint256 principal);
+    event CollateralUpdated(address indexed account, uint256 collateral);
+    event BaseSupplyIndexUpdated(uint256 baseSupplyIndex);
+    event BaseBorrowIndexUpdated(uint256 baseBorrowIndex);
+    event PendingAdminSet(address indexed pendingAdmin);
+    event AdminUpdated(address indexed admin);
 
     // -------------------------------------------------------------------------------------------
     // Modifiers
@@ -147,10 +155,12 @@ contract LendingMarket {
         uint256 suppliesBefore = presentValueSupply(totalSupplyPrincipal);
 
         baseBorrowIndex += (baseBorrowIndex * interest) / FACTOR;
+        emit BaseBorrowIndexUpdated(baseBorrowIndex);
 
         if (suppliesBefore > 0) {
             uint256 accruedToSuppliers = (borrowsBefore * interest) / FACTOR;
             baseSupplyIndex += (baseSupplyIndex * accruedToSuppliers) / suppliesBefore;
+            emit BaseSupplyIndexUpdated(baseSupplyIndex);
         }
 
         lastAccrualTime = block.timestamp;
@@ -177,11 +187,10 @@ contract LendingMarket {
         require(amount > 0, "zero amount");
         accrueInterest();
 
-        uint256 principal = _principalForSupply(amount); // princip
+        uint256 principal = _principalForSupply(amount);
         require(supplyPrincipal[msg.sender] >= principal, "insufficient balance");
 
-        supplyPrincipal[msg.sender] -= principal;
-        totalSupplyPrincipal -= principal;
+        decrementPrincipal(msg.sender, principal);
 
         baseToken.transfer(msg.sender, amount);
 
@@ -197,8 +206,7 @@ contract LendingMarket {
 
         collateralToken.transferFrom(msg.sender, address(this), amount);
 
-        collateralBalance[msg.sender] += amount;
-        totalCollateral += amount;
+        incrementCollateral(msg.sender, amount);
 
         emit SupplyCollateral(msg.sender, amount);
     }
@@ -207,8 +215,7 @@ contract LendingMarket {
         require(amount > 0, "zero amount");
         require(collateralBalance[msg.sender] >= amount, "insufficient collateral");
 
-        collateralBalance[msg.sender] -= amount;
-        totalCollateral -= amount;
+        decrementCollateral(msg.sender, amount);
 
         require(isHealthy(msg.sender), "would be undercollateralized");
 
@@ -222,8 +229,7 @@ contract LendingMarket {
         accrueInterest();
 
         uint256 principal = _principalForBorrow(amount);
-        borrowPrincipal[msg.sender] += principal;
-        totalBorrowPrincipal += principal;
+        incrementPrincipal(msg.sender, principal);
 
         require(isHealthy(msg.sender), "would be undercollateralized");
 
@@ -243,11 +249,12 @@ contract LendingMarket {
 
         baseToken.transferFrom(msg.sender, address(this), amount);
 
-        borrowPrincipal[msg.sender] -= principal;
-        totalBorrowPrincipal -= principal;
+        decrementPrincipal(msg.sender, principal);
 
         emit Repay(msg.sender, amount);
     }
+
+    // TODO: FUTURE FEATURE Add the ability for someone to transfer their position (collateral/debts) to another user.
 
     // -------------------------------------------------------------------------------------------
     // Liquidation
@@ -269,16 +276,12 @@ contract LendingMarket {
         if (repayAmount > owed) repayAmount = owed;
 
         uint256 seizeAmount = (repayAmount * liquidationIncentive) / FACTOR;
-        if (seizeAmount > collateralBalance[borrower]) {
-            seizeAmount = collateralBalance[borrower];
-        }
+
+        if (seizeAmount > collateralBalance[borrower]) seizeAmount = collateralBalance[borrower];
 
         uint256 principal = _principalForBorrow(repayAmount);
-        borrowPrincipal[borrower] -= principal;
-        totalBorrowPrincipal -= principal;
-
-        collateralBalance[borrower] -= seizeAmount;
-        totalCollateral -= seizeAmount;
+        decrementPrincipal(borrower, principal);
+        decrementCollateral(borrower, seizeAmount);
 
         baseToken.transferFrom(msg.sender, address(this), repayAmount);
         collateralToken.transfer(msg.sender, seizeAmount);
@@ -320,10 +323,15 @@ contract LendingMarket {
         uint256 debt = borrowBalanceOf(account);
         if (debt == 0) return true;
 
-        uint256 collateralValue = (collateralBalance[account] * getPrice()) / FACTOR;
+        uint256 collateralValue = (collateralBalance[account] * getManipulationResistantPrice()) / FACTOR;
         uint256 borrowingPower = (collateralValue * collateralFactor) / FACTOR;
 
         return borrowingPower >= debt;
+    }
+
+    function getManipulationResistantPrice() public view returns (uint256) {
+        // go back to the lead engineer - determine how to make price manipulation resistant.
+        return getPrice();
     }
 
     /// @notice Collateral price in base-asset terms, 1e18 scaled.
@@ -355,6 +363,30 @@ contract LendingMarket {
     // both of these round down.
     function _principalForSupply(uint256 amount) internal view returns (uint256) {
         return (amount * FACTOR) / baseSupplyIndex;
+    }
+
+    function incrementPrincipal(address account, uint256 amount) internal {
+        supplyPrincipal[account] += amount;
+        totalSupplyPrincipal += amount;
+        emit PrincipalUpdated(account, supplyPrincipal[account]);
+    }
+
+    function decrementPrincipal(address account, uint256 amount) internal {
+        supplyPrincipal[account] -= amount;
+        totalSupplyPrincipal -= amount;
+        emit PrincipalUpdated(account, supplyPrincipal[account]);
+    }
+
+    function incrementCollateral(address account, uint256 amount) internal {
+        collateralBalance[account] += amount;
+        totalCollateral += amount;
+        emit CollateralUpdated(account, collateralBalance[account]);
+    }
+
+    function decrementCollateral(address account, uint256 amount) internal {
+        collateralBalance[account] -= amount;
+        totalCollateral -= amount;
+        emit CollateralUpdated(account, collateralBalance[account]);
     }
 
     // -------------------------------------------------------------------------------------------
@@ -391,8 +423,17 @@ contract LendingMarket {
         emit PausedSet(paused_);
     }
 
+    // TODO: add functionality where newAdmin has to claim the admin role by calling a function on the contract.
     function setAdmin(address newAdmin) external onlyAdmin {
         require(newAdmin != address(0), "zero admin");
-        admin = newAdmin;
+        pendingAdmin = newAdmin;
+        emit PendingAdminSet(newAdmin);
+    }
+
+    function claimAdmin() external {
+        require(msg.sender == pendingAdmin, "not pending admin");
+        admin = msg.sender;
+        pendingAdmin = address(0);
+        emit AdminUpdated(msg.sender);
     }
 }
