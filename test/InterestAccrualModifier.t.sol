@@ -6,6 +6,8 @@ import {LendingMarket} from "../src/LendingMarket.sol";
 import {MockOracle} from "../src/mocks/MockOracle.sol";
 
 contract InterestAccrualModifierTest is LendingMarketTest {
+    event PausedSet(bool paused);
+
     struct Accrual {
         uint256 borrowIndex;
         uint256 supplyIndex;
@@ -80,6 +82,21 @@ contract InterestAccrualModifierTest is LendingMarketTest {
         vm.prank(guardian);
         market.setPaused(true);
         assertTrue(market.paused());
+        _assertAccrual(expected);
+    }
+
+    function test_guardianUnpauseAccruesElapsedInterestAndEmitsEvent() public {
+        _openDebt();
+        vm.prank(guardian);
+        market.setPaused(true);
+        Accrual memory expected = _advanceTime();
+
+        vm.expectEmit(false, false, false, true, address(market));
+        emit PausedSet(false);
+        vm.prank(guardian);
+        market.setPaused(false);
+
+        assertFalse(market.paused());
         _assertAccrual(expected);
     }
 
@@ -274,15 +291,16 @@ contract InterestAccrualModifierTest is LendingMarketTest {
         market.setParameters(0.8e18, 1.1e18, type(uint256).max);
         vm.prank(guardian);
         market.setPaused(true);
+        Accrual memory before =
+            Accrual(market.baseBorrowIndex(), market.baseSupplyIndex(), market.lastAccrualTime());
         vm.warp(block.timestamp + 2);
         // Any attempted accrual would overflow; the original rejection must win.
         vm.expectRevert("paused");
         market.supplyCollateral(1e18);
         vm.expectRevert("not guardian");
         market.setPaused(false);
-        vm.prank(guardian);
-        vm.expectRevert("not admin");
-        market.setPaused(false);
+        vm.expectRevert("not guardian");
+        market.setPaused(true);
         vm.prank(guardian);
         vm.expectRevert("not admin");
         market.setOracle(address(wethOracle), 1 hours);
@@ -292,5 +310,8 @@ contract InterestAccrualModifierTest is LendingMarketTest {
         market.setAdmin(supplier);
         vm.expectRevert("not admin");
         market.setParameters(0.8e18, 1.1e18, RATE_PER_SECOND);
+        _assertAccrual(before);
+        assertTrue(market.paused());
+        assertEq(address(market.oracle()), address(wethOracle));
     }
 }
